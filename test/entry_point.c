@@ -1,28 +1,13 @@
 #include "../src/qw_chunk.h"
 #include "greatest.h"
 
-/* A test runs various assertions, then calls PASS(), FAIL(), or SKIP(). */
-TEST x_should_equal_1(void) {
-  int x = 1;
-  /* Compare, with an automatic "1 != x" failure message */
-  ASSERT_EQ(1, x);
-
-  /* Compare, with a custom failure message */
-  ASSERT_EQm("Yikes, x doesn't equal 1", 1, x);
-
-  /* Compare, and if they differ, print both values,
-   * formatted like `printf("Expected: %d\nGot: %d\n", 1, x);` */
-  ASSERT_EQ_FMT(1, x, "%d");
-  PASS();
-}
-
 TEST test_return_chunks(void) {
   Chunk ch;
   init_chunk(&ch);
   write_chunk(&ch, OP_RETURN, 1);
   write_chunk(&ch, OP_RETURN, 2);
   write_chunk(&ch, OP_RETURN, 3);
-  ASSERT_EQ(ch.code[0], OP_RETURN);
+  ASSERT_EQm("Expected return op", ch.code[0], OP_RETURN);
   ASSERT_EQ(ch.code[1], OP_RETURN);
   ASSERT_EQ(ch.code[2], OP_RETURN);
   PASS();
