@@ -41,11 +41,11 @@ static InterpretResult run() {
                                    &&do_op_add,    &&do_op_substract, &&do_op_multiply,      &&do_op_divide};
 
 /// BinaryOp does a binary operation on the vm
-#define BINARY_OP(_op_) \
-  do {                  \
-    double b = pop();   \
-    double a = pop();   \
-    push(a _op_ b);     \
+#define BINARY_OP(_op_)                                                                         \
+  /* Equivalent of popping two values and making the operation and then pushing to the stack */ \
+  do {                                                                                          \
+    double b = pop();                                                                           \
+    (*(vm.stack_top - 1)) = (*(vm.stack_top - 1)) _op_ b;                                       \
   } while (false);
 
 #ifdef DEBUG_TRACE_EXECUTION
@@ -97,8 +97,8 @@ static InterpretResult run() {
   }
 
   do_op_negate : {
-    Value value = pop();
-    push(-value);
+    // Equivalent of popping a value from the stack, negating it, and then pushing it again
+    *(vm.stack_top - 1) = -(*(vm.stack_top - 1));
     continue;
   }
 
