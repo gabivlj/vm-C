@@ -6,11 +6,18 @@
 #include "qw_lines.h"
 #include "qw_values.h"
 
+/// OpCode enum values. Order definition matters because in the VM we are doing a technique
+/// that depends on the value of each enum
 typedef enum {
   OP_RETURN,
   OP_CONSTANT,
   // 1 byte opcode, 3 bytes long data
   OP_CONSTANT_LONG,
+  OP_NEGATE,
+  OP_ADD,
+  OP_SUBTRACT,
+  OP_MULTIPLY,
+  OP_DIVIDE,
 } OpCode;
 
 /// Chunk is a sequence of bytecode

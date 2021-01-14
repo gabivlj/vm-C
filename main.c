@@ -5,7 +5,7 @@
 #include "./src/qw_vm.h"
 
 int main() {
-  initVM();
+  init_vm();
   Chunk ch;
   init_chunk(&ch);
   add_constant_opcode(&ch, 1.2, 1);
