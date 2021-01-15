@@ -6,7 +6,7 @@
 TEST test_scanner_tokens() {
   const char* line =
       "/ />= ==!= == =!=123\"nice\"1.234cool_thing_123 if(True) { return 1; } else while print var nil super class "
-      "and or//";
+      "and or for false fun this true//";
   init_scanner(line);
   ASSERT_EQ(scan_token().type, TOKEN_SLASH);
   ASSERT_EQ(scan_token().type, TOKEN_SLASH);
@@ -38,6 +38,11 @@ TEST test_scanner_tokens() {
   ASSERT_EQ(scan_token().type, TOKEN_CLASS);
   ASSERT_EQ(scan_token().type, TOKEN_AND);
   ASSERT_EQ(scan_token().type, TOKEN_OR);
+  ASSERT_EQ(scan_token().type, TOKEN_FOR);
+  ASSERT_EQ(scan_token().type, TOKEN_FALSE);
+  ASSERT_EQ(scan_token().type, TOKEN_FUN);
+  ASSERT_EQ(scan_token().type, TOKEN_THIS);
+  ASSERT_EQ(scan_token().type, TOKEN_TRUE);
   ASSERT_EQ(scan_token().type, TOKEN_EOF);
   ASSERT_EQ(scan_token().type, TOKEN_EOF);
   PASS();

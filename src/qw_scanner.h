@@ -51,7 +51,11 @@ typedef enum {
   TOKEN_WHILE,
 
   TOKEN_ERROR,
-  TOKEN_EOF
+  TOKEN_EOF,
+  // `
+  TOKEN_STRING_LITERAL,
+  TOKEN_DOLLAR,
+  // TOKEN_STRING_LITERAL__PIECE,
 } TokenType;
 
 typedef struct {

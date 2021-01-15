@@ -104,7 +104,15 @@ static Token number() {
   return make_token(TOKEN_NUMBER);
 }
 
+/// Returns TokenType `token_type` related to the passed keyword
+/// `start` is the start idx for the scanner.start
+/// `len` is the length of the `target`
+/// `target` is the string literal to compare
+/// `token_type` Expected keyword
 static TokenType check_keyword(u8 start, u8 len, const char* target, TokenType token_type) {
+  if (scanner.current - scanner.start != len + start) {
+    return TOKEN_IDENTIFIER;
+  }
   for (int i = start, j = 0; j < len; i++, j++) {
     if (target[j] != scanner.start[i]) {
       return TOKEN_IDENTIFIER;
@@ -113,8 +121,33 @@ static TokenType check_keyword(u8 start, u8 len, const char* target, TokenType t
   return token_type;
 }
 
+/// Returns the TokenType related to the current parsed identifier current start
 static TokenType identifier_type() {
   switch (scanner.start[0]) {
+    // Complex cases
+    case 'f': {
+      if (scanner.current - scanner.start <= 1) break;
+      switch (scanner.start[1]) {
+        case 'a':
+          return check_keyword(2, 3, "lse", TOKEN_FALSE);
+        case 'u':
+          return check_keyword(2, 1, "n", TOKEN_FUN);
+        case 'o':
+          return check_keyword(2, 1, "r", TOKEN_FOR);
+      }
+      break;
+    }
+    case 't': {
+      if (scanner.current - scanner.start <= 1) break;
+      switch (scanner.start[1]) {
+        case 'r':
+          return check_keyword(2, 2, "ue", TOKEN_TRUE);
+        case 'h':
+          return check_keyword(2, 2, "is", TOKEN_THIS);
+      }
+      break;
+    }
+    // Simple cases
     case 'a':
       return check_keyword(1, 2, "nd", TOKEN_AND);
     case 'c':

@@ -1,6 +1,9 @@
 #ifndef qw_compiler_h
 #define qw_compiler_h
+#include "qw_chunk.h"
+#include "qw_common.h"
+#include "qw_scanner.h"
 
-void compile(const char* source);
+u8 compile(const char* source, Chunk* chunk);
 
 #endif

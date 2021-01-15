@@ -1,6 +1,8 @@
 #ifndef qw_common_h
 #define qw_common_h
 
+#define DEBUG_PRINT_CODE
+
 #include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
@@ -23,7 +25,6 @@ typedef size_t isize;
   exit(1);
 
 #define assert_or_exit(expr) \
-  if (!(expr))               \
-    exit(1);
+  if (!(expr)) exit(1);
 
 #endif
