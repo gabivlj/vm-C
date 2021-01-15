@@ -4,7 +4,7 @@
 #include "greatest.h"
 
 TEST test_scanner_tokens() {
-  const char* line = "/ / >= == != == = != //";
+  const char* line = "/ />= ==!= == =!=123\"nice\"1.234cool_thing_123//";
   init_scanner(line);
   ASSERT_EQ(scan_token().type, TOKEN_SLASH);
   ASSERT_EQ(scan_token().type, TOKEN_SLASH);
@@ -14,6 +14,12 @@ TEST test_scanner_tokens() {
   ASSERT_EQ(scan_token().type, TOKEN_EQUAL_EQUAL);
   ASSERT_EQ(scan_token().type, TOKEN_EQUAL);
   ASSERT_EQ(scan_token().type, TOKEN_BANG_EQUAL);
+  ASSERT_EQ(scan_token().type, TOKEN_NUMBER);
+  ASSERT_EQ(scan_token().type, TOKEN_STRING);
+  ASSERT_EQ(scan_token().type, TOKEN_NUMBER);
+  ASSERT_EQ(scan_token().type, TOKEN_IDENTIFIER);
+  ASSERT_EQ(scan_token().type, TOKEN_EOF);
+  ASSERT_EQ(scan_token().type, TOKEN_EOF);
   PASS();
 }
 

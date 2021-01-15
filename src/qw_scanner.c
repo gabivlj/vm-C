@@ -51,6 +51,10 @@ static char advance() {
 #define MATCH_PEEK(c, if_equal, alternative) \
   (c == *(scanner.current) && !IS_END && ++scanner.current ? if_equal : alternative)
 
+#define IS_DIGIT(c) (c >= '0' && c <= '9')
+
+#define IS_ALPHA(c) ((c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || c == '_')
+
 static void skip_whitespace() {
   char c = PEEK;
   while ((c == ' ' || c == '\n' || c == '\t' || c == '\r' || c == '/') && !IS_END) {
@@ -62,6 +66,7 @@ static void skip_whitespace() {
         while (PEEK != '\n' && !IS_END) {
           advance();
         }
+        continue;
       } else {
         break;
       }
@@ -74,11 +79,36 @@ static void skip_whitespace() {
 static Token string() {
   while (PEEK != '"') {
     if (PEEK == '\0') return error_token("Expected '\"', instead got EOF");
+    if (PEEK == '\n') {
+      scanner.line++;
+    }
     advance();
   }
   // Consume `"`
   advance();
   return make_token(TOKEN_STRING);
+}
+
+static Token number() {
+  while (IS_DIGIT(PEEK)) {
+    advance();
+  }
+  if (PEEK == '.' && IS_DIGIT(PEEK_NEXT)) {
+    // Consume '.'
+    advance();
+    // Handle decimal
+    while (IS_DIGIT(PEEK)) {
+      advance();
+    }
+  }
+  return make_token(TOKEN_NUMBER);
+}
+
+static TokenType identifier_type() { return TOKEN_IDENTIFIER; }
+
+static Token identifier() {
+  while (IS_ALPHA(PEEK) || IS_DIGIT(PEEK)) advance();
+  return make_token(identifier_type());
 }
 
 Token scan_token() {
@@ -88,6 +118,12 @@ Token scan_token() {
   }
   scanner.start = scanner.current;
   char current_character = advance();
+  if (IS_DIGIT(current_character)) {
+    return number();
+  }
+  if (IS_ALPHA(current_character)) {
+    return identifier();
+  }
   // printf("%c \n", current_character);
   switch (current_character) {
     case '(':
