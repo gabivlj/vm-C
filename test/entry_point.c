@@ -4,7 +4,9 @@
 #include "greatest.h"
 
 TEST test_scanner_tokens() {
-  const char* line = "/ />= ==!= == =!=123\"nice\"1.234cool_thing_123//";
+  const char* line =
+      "/ />= ==!= == =!=123\"nice\"1.234cool_thing_123 if(True) { return 1; } else while print var nil super class "
+      "and or//";
   init_scanner(line);
   ASSERT_EQ(scan_token().type, TOKEN_SLASH);
   ASSERT_EQ(scan_token().type, TOKEN_SLASH);
@@ -18,6 +20,24 @@ TEST test_scanner_tokens() {
   ASSERT_EQ(scan_token().type, TOKEN_STRING);
   ASSERT_EQ(scan_token().type, TOKEN_NUMBER);
   ASSERT_EQ(scan_token().type, TOKEN_IDENTIFIER);
+  ASSERT_EQ(scan_token().type, TOKEN_IF);
+  ASSERT_EQ(scan_token().type, TOKEN_LEFT_PAREN);
+  ASSERT_EQ(scan_token().type, TOKEN_IDENTIFIER);
+  ASSERT_EQ(scan_token().type, TOKEN_RIGHT_PAREN);
+  ASSERT_EQ(scan_token().type, TOKEN_LEFT_BRACE);
+  ASSERT_EQ(scan_token().type, TOKEN_RETURN);
+  ASSERT_EQ(scan_token().type, TOKEN_NUMBER);
+  ASSERT_EQ(scan_token().type, TOKEN_SEMICOLON);
+  ASSERT_EQ(scan_token().type, TOKEN_RIGHT_BRACE);
+  ASSERT_EQ(scan_token().type, TOKEN_ELSE);
+  ASSERT_EQ(scan_token().type, TOKEN_WHILE);
+  ASSERT_EQ(scan_token().type, TOKEN_PRINT);
+  ASSERT_EQ(scan_token().type, TOKEN_VAR);
+  ASSERT_EQ(scan_token().type, TOKEN_NIL);
+  ASSERT_EQ(scan_token().type, TOKEN_SUPER);
+  ASSERT_EQ(scan_token().type, TOKEN_CLASS);
+  ASSERT_EQ(scan_token().type, TOKEN_AND);
+  ASSERT_EQ(scan_token().type, TOKEN_OR);
   ASSERT_EQ(scan_token().type, TOKEN_EOF);
   ASSERT_EQ(scan_token().type, TOKEN_EOF);
   PASS();

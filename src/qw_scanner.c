@@ -104,7 +104,42 @@ static Token number() {
   return make_token(TOKEN_NUMBER);
 }
 
-static TokenType identifier_type() { return TOKEN_IDENTIFIER; }
+static TokenType check_keyword(u8 start, u8 len, const char* target, TokenType token_type) {
+  for (int i = start, j = 0; j < len; i++, j++) {
+    if (target[j] != scanner.start[i]) {
+      return TOKEN_IDENTIFIER;
+    }
+  }
+  return token_type;
+}
+
+static TokenType identifier_type() {
+  switch (scanner.start[0]) {
+    case 'a':
+      return check_keyword(1, 2, "nd", TOKEN_AND);
+    case 'c':
+      return check_keyword(1, 4, "lass", TOKEN_CLASS);
+    case 'e':
+      return check_keyword(1, 3, "lse", TOKEN_ELSE);
+    case 'i':
+      return check_keyword(1, 1, "f", TOKEN_IF);
+    case 'n':
+      return check_keyword(1, 2, "il", TOKEN_NIL);
+    case 'o':
+      return check_keyword(1, 1, "r", TOKEN_OR);
+    case 'p':
+      return check_keyword(1, 4, "rint", TOKEN_PRINT);
+    case 'r':
+      return check_keyword(1, 5, "eturn", TOKEN_RETURN);
+    case 's':
+      return check_keyword(1, 4, "uper", TOKEN_SUPER);
+    case 'v':
+      return check_keyword(1, 2, "ar", TOKEN_VAR);
+    case 'w':
+      return check_keyword(1, 4, "hile", TOKEN_WHILE);
+  }
+  return TOKEN_IDENTIFIER;
+}
 
 static Token identifier() {
   while (IS_ALPHA(PEEK) || IS_DIGIT(PEEK)) advance();
