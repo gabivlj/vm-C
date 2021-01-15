@@ -1,6 +1,7 @@
 #include "qw_vm.h"
 
 #include "qw_common.h"
+#include "qw_compiler.h"
 #include "qw_debug.h"
 
 #define DEBUG_TRACE_EXECUTION
@@ -136,3 +137,8 @@ InterpretResult interpret(Chunk* chunk) {
 }
 
 Value* stack_vm() { return vm.stack; }
+
+InterpretResult interpret_source(const char* source) {
+  compile(source);
+  return INTERPRET_OK;
+}

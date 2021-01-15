@@ -19,6 +19,7 @@ void init_vm();
 void free_vm();
 void push(Value value);
 Value* stack_vm();
+InterpretResult interpret_source(const char* source);
 
 Value pop();
 

@@ -1,6 +1,34 @@
 #include "../src/qw_chunk.h"
+#include "../src/qw_scanner.h"
 #include "../src/qw_vm.h"
 #include "greatest.h"
+
+TEST test_scanner_tokens() {
+  const char* line = "/ / >= == != == = != //";
+  init_scanner(line);
+  ASSERT_EQ(scan_token().type, TOKEN_SLASH);
+  ASSERT_EQ(scan_token().type, TOKEN_SLASH);
+  ASSERT_EQ(scan_token().type, TOKEN_GREATER_EQUAL);
+  ASSERT_EQ(scan_token().type, TOKEN_EQUAL_EQUAL);
+  ASSERT_EQ(scan_token().type, TOKEN_BANG_EQUAL);
+  ASSERT_EQ(scan_token().type, TOKEN_EQUAL_EQUAL);
+  ASSERT_EQ(scan_token().type, TOKEN_EQUAL);
+  ASSERT_EQ(scan_token().type, TOKEN_BANG_EQUAL);
+  PASS();
+}
+
+TEST test_string_literal() {
+  const char* line = "                \n\"TEST TEST TEst!-23-4120-5934259235msfdmsfdm\nt\"";
+  init_scanner(line);
+  char* target = "\"TEST TEST TEst!-23-4120-5934259235msfdmsfdm\nt\"";
+  isize size = (isize)strlen(target);
+  Token tok = scan_token();
+  ASSERT_EQ(size, tok.length);
+  for (int i = 0; i < size; i++) {
+    ASSERT_EQ(target[i], *(tok.start + i));
+  }
+  PASS();
+}
 
 TEST test_return_chunks(void) {
   Chunk ch;
@@ -148,6 +176,11 @@ SUITE(vm_suite) {
   RUN_TEST(test_large_op);
 }
 
+SUITE(scanner_suite) {
+  RUN_TEST(test_scanner_tokens);
+  RUN_TEST(test_string_literal);
+}
+
 /* Add definitions that need to be in the test runner's main file. */
 GREATEST_MAIN_DEFS();
 
@@ -157,6 +190,8 @@ int main(int argc, char** argv) {
   RUN_SUITE(chunk_suite);
 
   RUN_SUITE(vm_suite);
+
+  RUN_SUITE(scanner_suite);
 
   GREATEST_MAIN_END(); /* display results */
 }
