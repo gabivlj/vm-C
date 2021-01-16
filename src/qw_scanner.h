@@ -56,6 +56,9 @@ typedef enum {
   TOKEN_STRING_LITERAL,
   TOKEN_DOLLAR,
   // TOKEN_STRING_LITERAL__PIECE,
+
+  TOKEN_QUESTION,
+  TOKEN_DOUBLE_DOT,
 } TokenType;
 
 typedef struct {

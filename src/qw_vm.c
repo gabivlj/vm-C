@@ -1,12 +1,16 @@
 #include "qw_vm.h"
 
+#include <stdarg.h>
+
 #include "qw_common.h"
 #include "qw_compiler.h"
 #include "qw_debug.h"
 
-#define DEBUG_TRACE_EXECUTION
+// #define DEBUG_TRACE_EXECUTION
 
 VM vm;
+
+#define PEEK_STACK(distance) *(vm.stack_top - 1 - distance)
 
 static void reset_stack() { vm.stack_top = vm.stack; }
 
@@ -23,6 +27,16 @@ Value pop() {
 void init_vm() { reset_stack(); }
 
 void free_vm() {}
+static void runtime_error(const char* format, ...) {
+  va_list args;
+  va_start(args, format);
+  vfprintf(stderr, format, args);
+  va_end(args);
+  fputs("\n", stderr);
+  isize ins = (vm.ip - vm.chunk->code) - 1;
+  u32 line = get_line_from_chunk(vm.chunk, ins);
+  reset_stack();
+}
 
 static InterpretResult run() {
 /// Returns the value of the current instrucction
@@ -42,11 +56,15 @@ static InterpretResult run() {
                                    &&do_op_add,    &&do_op_substract, &&do_op_multiply,      &&do_op_divide};
 
 /// BinaryOp does a binary operation on the vm
-#define BINARY_OP(_op_)                                                                         \
+#define BINARY_OP(value_type, _op_)                                                             \
   /* Equivalent of popping two values and making the operation and then pushing to the stack */ \
   do {                                                                                          \
-    double b = pop();                                                                           \
-    (*(vm.stack_top - 1)) = (*(vm.stack_top - 1)) _op_ b;                                       \
+    if (!IS_NUMBER(PEEK_STACK(1)) || !IS_NUMBER(PEEK_STACK(0))) {                               \
+      runtime_error("Operands must be numbers");                                                \
+      return INTERPRET_RUNTIME_ERROR;                                                           \
+    }                                                                                           \
+    double b = AS_NUMBER(pop());                                                                \
+    (*(vm.stack_top - 1)) = value_type(AS_NUMBER(*(vm.stack_top - 1)) _op_ b);                  \
   } while (false);
 
 #ifdef DEBUG_TRACE_EXECUTION
@@ -99,27 +117,31 @@ static InterpretResult run() {
 
   do_op_negate : {
     // Equivalent of popping a value from the stack, negating it, and then pushing it again
-    *(vm.stack_top - 1) = -(*(vm.stack_top - 1));
+    if (!IS_NUMBER(PEEK_STACK(0))) {
+      runtime_error("expected a number");
+      return INTERPRET_RUNTIME_ERROR;
+    }
+    *(vm.stack_top - 1) = NUMBER_VAL(-(AS_NUMBER(*(vm.stack_top - 1))));
     continue;
   }
 
   do_op_add : {
-    BINARY_OP(+);
+    BINARY_OP(NUMBER_VAL, +);
     continue;
   }
 
   do_op_substract : {
-    BINARY_OP(-);
+    BINARY_OP(NUMBER_VAL, -);
     continue;
   }
 
   do_op_multiply : {
-    BINARY_OP(*);
+    BINARY_OP(NUMBER_VAL, *);
     continue;
   }
 
   do_op_divide : {
-    BINARY_OP(/);
+    BINARY_OP(NUMBER_VAL, /);
     continue;
   }
   }

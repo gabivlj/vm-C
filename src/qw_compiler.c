@@ -32,6 +32,8 @@ static void binary();
 static void unary();
 static void grouping();
 static void number();
+static void ternary();
+static void literal();
 ParseRule rules[] = {
     [TOKEN_LEFT_PAREN] = {grouping, NULL, PREC_NONE},
     [TOKEN_RIGHT_PAREN] = {NULL, NULL, PREC_NONE},
@@ -58,19 +60,21 @@ ParseRule rules[] = {
     [TOKEN_AND] = {NULL, NULL, PREC_NONE},
     [TOKEN_CLASS] = {NULL, NULL, PREC_NONE},
     [TOKEN_ELSE] = {NULL, NULL, PREC_NONE},
-    [TOKEN_FALSE] = {NULL, NULL, PREC_NONE},
+    [TOKEN_FALSE] = {literal, NULL, PREC_NONE},
     [TOKEN_FOR] = {NULL, NULL, PREC_NONE},
     [TOKEN_FUN] = {NULL, NULL, PREC_NONE},
     [TOKEN_IF] = {NULL, NULL, PREC_NONE},
-    [TOKEN_NIL] = {NULL, NULL, PREC_NONE},
+    [TOKEN_NIL] = {literal, NULL, PREC_NONE},
     [TOKEN_OR] = {NULL, NULL, PREC_NONE},
     [TOKEN_PRINT] = {NULL, NULL, PREC_NONE},
     [TOKEN_RETURN] = {NULL, NULL, PREC_NONE},
     [TOKEN_SUPER] = {NULL, NULL, PREC_NONE},
     [TOKEN_THIS] = {NULL, NULL, PREC_NONE},
-    [TOKEN_TRUE] = {NULL, NULL, PREC_NONE},
+    [TOKEN_TRUE] = {literal, NULL, PREC_NONE},
     [TOKEN_VAR] = {NULL, NULL, PREC_NONE},
     [TOKEN_WHILE] = {NULL, NULL, PREC_NONE},
+    [TOKEN_QUESTION] = {NULL, ternary, PREC_ASSIGNMENT},
+    [TOKEN_DOUBLE_DOT] = {NULL, NULL, PREC_NONE},
     [TOKEN_ERROR] = {NULL, NULL, PREC_NONE},
     [TOKEN_EOF] = {NULL, NULL, PREC_NONE},
 };
@@ -191,6 +195,8 @@ static void binary() {
   }
 }
 
+static void literal() {}
+
 // ::= '-' expression
 static void unary() {
   TokenType operator_type = parser.previous.type;
@@ -206,9 +212,16 @@ static void unary() {
   }
 }
 
+static void ternary() {
+  // TODO: Emit code of handling ternary
+  parse_precedence(PREC_UNARY);
+  assert_current_and_advance(TOKEN_DOUBLE_DOT, "expected doubles");
+  parse_precedence(PREC_UNARY);
+}
+
 static void number() {
   double value = strtod(parser.previous.start, NULL);
-  emit_constant(value);
+  emit_constant(NUMBER_VAL(value));
 }
 
 u8 compile(const char* source, Chunk* chunk_to_add_on) {

@@ -2,6 +2,7 @@
 #define qw_chunk_h
 
 #include <stdio.h>
+
 #include "qw_common.h"
 #include "qw_lines.h"
 #include "qw_values.h"
@@ -18,6 +19,9 @@ typedef enum {
   OP_SUBTRACT,
   OP_MULTIPLY,
   OP_DIVIDE,
+  OP_NIL,
+  OP_TRUE,
+  OP_FALSE,
 } OpCode;
 
 /// Chunk is a sequence of bytecode

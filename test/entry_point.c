@@ -77,7 +77,7 @@ TEST test_constants_chunks(void) {
   Chunk ch;
   init_chunk(&ch);
   for (int i = 0; i < 300; i++) {
-    add_constant_opcode(&ch, 1.2 + i, i);
+    add_constant_opcode(&ch, NUMBER_VAL(1.2 + i), i);
   }
   for (int i = 0; i < 256 * 2; i += 2) {
     ASSERT_EQ(ch.code[i], OP_CONSTANT);
@@ -94,11 +94,11 @@ TEST test_vm_stack(void) {
   init_vm();
 
   for (int i = 0; i < STACK_MAX; i++) {
-    push(i);
+    push(NUMBER_VAL(i));
   }
 
   for (int i = STACK_MAX - 1; i >= 0; i--) {
-    ASSERT_EQ(pop(), i);
+    ASSERT_EQ(pop().as.number, i);
   }
 
   free_vm();
@@ -110,11 +110,11 @@ TEST test_vm_ins_negate(void) {
 
   Chunk ch;
   init_chunk(&ch);
-  add_constant_opcode(&ch, 1, 1);
+  add_constant_opcode(&ch, NUMBER_VAL(1), 1);
   write_chunk(&ch, OP_NEGATE, 1);
   write_chunk(&ch, OP_RETURN, 1);
   interpret(&ch);
-  ASSERT_EQ(stack_vm()[0], -1);
+  ASSERT_EQ(stack_vm()[0].as.number, -1);
   free_chunk(&ch);
   free_vm();
   PASS();
@@ -122,9 +122,9 @@ TEST test_vm_ins_negate(void) {
 
 TEST test_vm_ins_binary_ops(void) {
   typedef struct {
-    Value op1;
-    Value op2;
-    Value expected;
+    double op1;
+    double op2;
+    double expected;
     OpCode code;
   } Test;
   Test tests[5] = {
@@ -133,12 +133,12 @@ TEST test_vm_ins_binary_ops(void) {
     init_vm();
     Chunk ch;
     init_chunk(&ch);
-    add_constant_opcode(&ch, tests[i].op1, 1);
-    add_constant_opcode(&ch, tests[i].op2, 1);
+    add_constant_opcode(&ch, NUMBER_VAL(tests[i].op1), 1);
+    add_constant_opcode(&ch, NUMBER_VAL(tests[i].op2), 1);
     write_chunk(&ch, tests[i].code, 1);
     write_chunk(&ch, OP_RETURN, 1);
     interpret(&ch);
-    ASSERT_EQ(stack_vm()[0], tests[i].expected);
+    ASSERT_EQ(stack_vm()[0].as.number, tests[i].expected);
     free_chunk(&ch);
     free_vm();
   }
@@ -151,19 +151,19 @@ TEST test_large_op(void) {
   init_vm();
   Chunk ch;
   init_chunk(&ch);
-  add_constant_opcode(&ch, 2, 1);
-  add_constant_opcode(&ch, 3, 1);
+  add_constant_opcode(&ch, NUMBER_VAL(2), 1);
+  add_constant_opcode(&ch, NUMBER_VAL(3), 1);
   write_chunk(&ch, OP_MULTIPLY, 1);
-  add_constant_opcode(&ch, 1, 1);
+  add_constant_opcode(&ch, NUMBER_VAL(1), 1);
   write_chunk(&ch, OP_ADD, 1);
-  add_constant_opcode(&ch, 4, 1);
-  add_constant_opcode(&ch, 5, 1);
+  add_constant_opcode(&ch, NUMBER_VAL(4), 1);
+  add_constant_opcode(&ch, NUMBER_VAL(5), 1);
   write_chunk(&ch, OP_NEGATE, 1);
   write_chunk(&ch, OP_MULTIPLY, 1);
   write_chunk(&ch, OP_SUBTRACT, 1);
   write_chunk(&ch, OP_RETURN, 1);
   interpret(&ch);
-  ASSERT_EQ(stack_vm()[0], 27);
+  ASSERT_EQ(stack_vm()[0].as.number, 27);
   free_chunk(&ch);
   free_vm();
   PASS();
@@ -173,8 +173,8 @@ TEST test_lines(void) {
   Chunk ch;
   init_chunk(&ch);
   for (int i = 0; i < 128; i++) {
-    add_constant_opcode(&ch, 1.2 + i, i);
-    add_constant_opcode(&ch, 1.2 + i, i);
+    add_constant_opcode(&ch, NUMBER_VAL(1.2 + i), i);
+    add_constant_opcode(&ch, NUMBER_VAL(1.2 + i), i);
   }
   for (int i = 0; i < ch.lines.count; i++) {
     ASSERT_EQ(ch.lines.lines[i].times, 4);
@@ -182,8 +182,8 @@ TEST test_lines(void) {
   }
   int prev = ch.lines.count;
   for (int i = 0; i < 128; i++) {
-    add_constant_opcode(&ch, 1.2 + i, i + prev);
-    add_constant_opcode(&ch, 1.2 + i, i + prev);
+    add_constant_opcode(&ch, NUMBER_VAL(1.2 + i), i + prev);
+    add_constant_opcode(&ch, NUMBER_VAL(1.2 + i), i + prev);
   }
   for (int i = prev; i < ch.lines.count; i++) {
     // 6 times because when there is more than 256 constants, we start

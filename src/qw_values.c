@@ -1,4 +1,5 @@
 #include "qw_values.h"
+
 #include "memory.h"
 
 void init_value_array(ValueArray* array) {
@@ -21,6 +22,4 @@ void free_value_array(ValueArray* array) {
   init_value_array(array);
 }
 
-void print_value(Value value) {
-  printf("%f", value);
-}
+void print_value(Value value) { printf("%g", AS_NUMBER(value)); }

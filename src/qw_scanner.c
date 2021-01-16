@@ -194,6 +194,10 @@ Token scan_token() {
   }
   // printf("%c \n", current_character);
   switch (current_character) {
+    case '?':
+      return make_token(TOKEN_QUESTION);
+    case ':':
+      return make_token(TOKEN_DOUBLE_DOT);
     case '(':
       return make_token(TOKEN_LEFT_PAREN);
     case ')':
@@ -224,6 +228,7 @@ Token scan_token() {
       return make_token(MATCH_PEEK('=', TOKEN_GREATER_EQUAL, TOKEN_GREATER));
     case '<':
       return make_token(MATCH_PEEK('=', TOKEN_LESS_EQUAL, TOKEN_LESS));
+
     case '"': {
       return string();
     }
