@@ -42,11 +42,15 @@ static void runtime_error(const char* format, ...) {
 static inline void concatenate() {
   ObjectString* right = AS_STRING(pop());
   ObjectString* left = AS_STRING(pop());
+  // +1 because -> length doesn't include the \0
   left->chars = (char*)reallocate(left->chars, left->length, left->length + right->length + 1);
+  // start from the left->length until left->length + right->length copying each char
   for (int i = left->length, j = 0; i < left->length + right->length; i++, j++) {
     left->chars[i] = right->chars[j];
   }
+  // new length (don't include \0)
   left->length = left->length + right->length;
+  // add at the end the \0
   left->chars[left->length] = 0;
   push(OBJECT_VAL(left));
 }
