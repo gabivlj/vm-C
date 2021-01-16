@@ -1,6 +1,6 @@
 #ifndef qw_common_h
 #define qw_common_h
-
+#include <string.h>
 // #define DEBUG_PRINT_CODE
 
 #include <stdbool.h>

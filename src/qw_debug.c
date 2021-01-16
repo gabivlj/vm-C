@@ -64,6 +64,9 @@ u32 dissasemble_instruction(Chunk* chunk, u32 offset) {
     case OP_MULTIPLY: {
       return simple_instruction("OP_MULTIPLY", offset);
     }
+    case OP_NOT: {
+      return simple_instruction("OP_NOT", offset);
+    }
     default: {
       printf("unknown opcode: %d\n", instruction);
       return offset + 1;

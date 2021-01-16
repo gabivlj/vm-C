@@ -1,6 +1,7 @@
 #include "qw_values.h"
 
 #include "memory.h"
+#include "qw_object.h"
 
 void init_value_array(ValueArray* array) {
   array->values = NULL;
@@ -22,4 +23,29 @@ void free_value_array(ValueArray* array) {
   init_value_array(array);
 }
 
-void print_value(Value value) { printf("%g", AS_NUMBER(value)); }
+void print_value(Value value) {
+  switch (value.type) {
+    case VAL_BOOL: {
+      if (value.as.boolean) {
+        printf("true");
+      } else {
+        printf("false");
+      }
+      break;
+    }
+    case VAL_NIL: {
+      printf("nil");
+      break;
+    }
+    case VAL_NUMBER: {
+      printf("%g", AS_NUMBER(value));
+      break;
+    }
+    case VAL_OBJECT:
+      print_object(value);
+      break;
+    default: {
+      return;
+    }
+  }
+}

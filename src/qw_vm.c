@@ -5,6 +5,7 @@
 #include "qw_common.h"
 #include "qw_compiler.h"
 #include "qw_debug.h"
+#include "qw_object.h"
 
 // #define DEBUG_TRACE_EXECUTION
 
@@ -38,6 +39,18 @@ static void runtime_error(const char* format, ...) {
   reset_stack();
 }
 
+static inline void concatenate() {
+  ObjectString* right = AS_STRING(pop());
+  ObjectString* left = AS_STRING(pop());
+  left->chars = (char*)reallocate(left->chars, left->length, left->length + right->length + 1);
+  for (int i = left->length, j = 0; i < left->length + right->length; i++, j++) {
+    left->chars[i] = right->chars[j];
+  }
+  left->length = left->length + right->length;
+  left->chars[left->length] = 0;
+  push(OBJECT_VAL(left));
+}
+
 static InterpretResult run() {
 /// Returns the value of the current instrucction
 /// and advances instruction pointer to the next byte
@@ -53,7 +66,9 @@ static InterpretResult run() {
 /// Constant long is able to contain 2 byte constants
 #define READ_CONSTANT_LONG() (vm.chunk->constants.values[(READ_BYTE() << 8) | READ_BYTE()])
   static void* dispatch_table[] = {&&do_op_return, &&do_op_constant,  &&do_op_constant_long, &&do_op_negate,
-                                   &&do_op_add,    &&do_op_substract, &&do_op_multiply,      &&do_op_divide};
+                                   &&do_op_add,    &&do_op_substract, &&do_op_multiply,      &&do_op_divide,
+                                   &&do_op_nil,    &&do_op_true,      &&do_op_false,         &&do_op_bang,
+                                   &&do_op_equal,  &&do_op_greater,   &&do_op_less};
 
 /// BinaryOp does a binary operation on the vm
 #define BINARY_OP(value_type, _op_)                                                             \
@@ -116,17 +131,27 @@ static InterpretResult run() {
   }
 
   do_op_negate : {
+    Value* v = &PEEK_STACK(0);
     // Equivalent of popping a value from the stack, negating it, and then pushing it again
-    if (!IS_NUMBER(PEEK_STACK(0))) {
+    if (!IS_NUMBER(*v)) {
       runtime_error("expected a number");
       return INTERPRET_RUNTIME_ERROR;
     }
-    *(vm.stack_top - 1) = NUMBER_VAL(-(AS_NUMBER(*(vm.stack_top - 1))));
+    v->as.number = -v->as.number;
     continue;
   }
 
   do_op_add : {
-    BINARY_OP(NUMBER_VAL, +);
+    Value left = PEEK_STACK(1);
+    Value right = PEEK_STACK(0);
+    if (IS_STRING(left) && IS_STRING(right)) {
+      concatenate();
+    } else if (IS_NUMBER(left) && IS_NUMBER(right)) {
+      right = pop();
+      (&PEEK_STACK(0))->as.number = left.as.number + right.as.number;
+    } else {
+      runtime_error("error, operands either are strings or numbers");
+    }
     continue;
   }
 
@@ -142,6 +167,66 @@ static InterpretResult run() {
 
   do_op_divide : {
     BINARY_OP(NUMBER_VAL, /);
+    continue;
+  }
+  do_op_true : {
+    push(BOOL_VAL(true));
+    continue;
+  }
+  do_op_false : {
+    push(BOOL_VAL(false));
+    continue;
+  }
+  do_op_nil : {
+    push(NIL_VAL);
+    continue;
+  }
+
+  do_op_equal : {
+    Value right = pop();
+    Value* left = &PEEK_STACK(0);
+    if (right.type != left->type) {
+      left->type = VAL_BOOL;
+      left->as.number = 0;
+      left->as.boolean = false;
+      continue;
+    }
+    if (IS_STRING(right)) {
+      ObjectString* right_s = AS_STRING(right);
+      ObjectString* left_s = AS_STRING(*left);
+      left->as.boolean = (left_s->length == right_s->length && memcmp(left_s, right_s, left_s->length) == 0) ||
+                         ((left->as.object = 0));
+      left->type = VAL_BOOL;
+      continue;
+    }
+    if (IS_BOOL(right)) {
+      left->as.boolean = right.as.boolean == left->as.boolean;
+      continue;
+    }
+    if (IS_NUMBER(right)) {
+      left->type = VAL_BOOL;
+      left->as.boolean = (left->as.number == right.as.number) || (left->as.number = 0);
+      continue;
+    }
+    runtime_error("can't evaluate these types with this type");
+  }
+
+  do_op_greater : {
+    BINARY_OP(BOOL_VAL, >);
+    continue;
+  }
+
+  do_op_less : {
+    BINARY_OP(BOOL_VAL, <);
+    continue;
+  }
+
+  do_op_bang : {
+    Value* top = &PEEK_STACK(0);
+
+    top->as.boolean = top->type == VAL_NIL || (top->type == VAL_BOOL && !top->as.boolean) ||
+                      (top->type == VAL_NUMBER && top->as.number > 0.000001 && !(top->as.number = 0));
+    top->type = VAL_BOOL;
     continue;
   }
   }

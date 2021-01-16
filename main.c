@@ -4,6 +4,7 @@
 
 #include "./src/qw_chunk.h"
 #include "./src/qw_debug.h"
+#include "./src/qw_object.h"
 #include "./src/qw_vm.h"
 
 #define EXIT_IF_ERR(expr, msg, code) \
@@ -21,6 +22,8 @@ static void repl() {
       break;
     }
     interpret_source(line);
+    print_value(*stack_vm());
+    printf("\n");
   }
 }
 
