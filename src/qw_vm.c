@@ -2,6 +2,7 @@
 
 #include <stdarg.h>
 
+#include "memory.h"
 #include "qw_common.h"
 #include "qw_compiler.h"
 #include "qw_debug.h"
@@ -9,9 +10,9 @@
 
 // #define DEBUG_TRACE_EXECUTION
 
-VM vm;
-
 #define PEEK_STACK(distance) *(vm.stack_top - 1 - distance)
+
+VM vm;
 
 static void reset_stack() { vm.stack_top = vm.stack; }
 
@@ -27,7 +28,8 @@ Value pop() {
 
 void init_vm() { reset_stack(); }
 
-void free_vm() {}
+void free_vm() { free_objects(); }
+
 static void runtime_error(const char* format, ...) {
   va_list args;
   va_start(args, format);
@@ -199,6 +201,7 @@ static InterpretResult run() {
       ObjectString* right_s = AS_STRING(right);
       ObjectString* left_s = AS_STRING(*left);
       left->as.boolean = (left_s->length == right_s->length && memcmp(left_s, right_s, left_s->length) == 0) ||
+                         // Put memory 8 bytes to 0
                          ((left->as.object = 0));
       left->type = VAL_BOOL;
       continue;
@@ -258,6 +261,7 @@ InterpretResult interpret_source(const char* source) {
   }
   vm.chunk = &chunk;
   vm.ip = vm.chunk->code;
+  vm.objects = NULL;
   InterpretResult result = run();
   free_chunk(&chunk);
   return result;

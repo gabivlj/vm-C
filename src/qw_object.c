@@ -1,6 +1,18 @@
+
 #include "qw_object.h"
 
-static ObjectString* allocate_string(char* chars, u32 length) {
+#include "memory.h"
+#include "qw_vm.h"
+
+Object* allocate_object(ObjectType type, isize true_size) {
+  Object* object = (Object*)reallocate(NULL, 0, true_size);
+  object->type = type;
+  object->next = vm.objects;
+  vm.objects = object;
+  return object;
+}
+
+ObjectString* allocate_string(char* chars, u32 length) {
   ObjectString* string = ALLOCATE_OBJECT(ObjectString, OBJECT_STRING);
   string->length = length;
   string->chars = chars;

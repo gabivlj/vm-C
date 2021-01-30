@@ -7,6 +7,7 @@
 
 struct Object {
   ObjectType type;
+  struct Object* next;
 };
 
 struct ObjectString {
@@ -28,11 +29,8 @@ void print_object(Value value);
 #define AS_STRING(value) ((ObjectString*)AS_OBJECT(value))
 #define AS_CSTRING(value) (((ObjectString*)AS_OBJECT(value))->chars)
 
-static Object* allocate_object(ObjectType type, isize true_size) {
-  Object* object = (Object*)reallocate(NULL, 0, true_size);
-  object->type = type;
-  return object;
-}
+ObjectString* allocate_string(char* chars, u32 length);
+Object* allocate_object(ObjectType type, isize true_size);
 #define ALLOCATE_OBJECT(object_type, enum_type) (object_type*)allocate_object(enum_type, sizeof(object_type))
 
 ObjectString* copy_string(u32 length, const char* start);
