@@ -93,7 +93,7 @@ static InterpretResult run() {
   static void* dispatch_table[] = {&&do_op_return, &&do_op_constant,  &&do_op_constant_long, &&do_op_negate,
                                    &&do_op_add,    &&do_op_substract, &&do_op_multiply,      &&do_op_divide,
                                    &&do_op_nil,    &&do_op_true,      &&do_op_false,         &&do_op_bang,
-                                   &&do_op_equal,  &&do_op_greater,   &&do_op_less};
+                                   &&do_op_equal,  &&do_op_greater,   &&do_op_less,          &&do_op_print};
 
 /// BinaryOp does a binary operation on the vm
 #define BINARY_OP(value_type, _op_)                                                             \
@@ -144,6 +144,13 @@ static InterpretResult run() {
 #endif
     return INTERPRET_OK;
   }
+
+  do_op_print : {
+    print_value(pop());
+    printf("\n");
+    continue;
+  }
+
   do_op_constant : {
     Value constant = READ_CONSTANT();
     push(constant);

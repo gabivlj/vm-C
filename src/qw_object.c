@@ -38,7 +38,7 @@ ObjectString* copy_string(u32 length, const char* start) {
   }
   ObjectString* string = allocate_string(length, hash);
   for (int i = 0; i < length; i++) {
-    string->chars[i] = *(start);
+    string->chars[i] = *(start + i);
   }
   string->chars[length] = 0;
   string->hash = hash;

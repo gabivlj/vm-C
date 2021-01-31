@@ -37,6 +37,8 @@ static void number();
 static void ternary();
 static void literal();
 static void string();
+static void statement();
+static void declaration();
 ParseRule rules[] = {
     [TOKEN_LEFT_PAREN] = {grouping, NULL, PREC_NONE},
     [TOKEN_RIGHT_PAREN] = {NULL, NULL, PREC_NONE},
@@ -150,6 +152,14 @@ static void assert_current_and_advance(TokenType type, const char* message) {
   error_at_current(message);
 }
 
+static bool check(TokenType type) { return parser.current.type == type; }
+
+static bool match(TokenType type) {
+  if (!check(type)) return false;
+  advance();
+  return true;
+}
+
 static inline void emit_byte(u8 byte) { write_chunk(current_chunk(), byte, parser.previous.line); }
 static inline void emit_u16(u16 value) { write_chunk_u16(current_chunk(), value, parser.previous.line); }
 static inline void emit_u32(u32 value) { write_chunk_u32(current_chunk(), value, parser.previous.line); }
@@ -164,6 +174,12 @@ static inline void end_compiler() {
     dissasemble_chunk(current_chunk(), "code");
   }
 #endif
+}
+
+static void print_statement() {
+  expression();
+  assert_current_and_advance(TOKEN_SEMICOLON, "Expected ';' after value.");
+  emit_byte(OP_PRINT);
 }
 
 // We use add_constant_opcode (internal logic inside chunk.h) because
@@ -279,12 +295,23 @@ static void number() {
   emit_constant(NUMBER_VAL(value));
 }
 
+static void statement() {
+  if (match(TOKEN_PRINT)) {
+    print_statement();
+  }
+}
+
+static void declaration() { statement(); }
+
 u8 compile(const char* source, Chunk* chunk_to_add_on) {
   init_scanner(source);
   chunk = chunk_to_add_on;
   parser.had_error = 0;
   parser.panic_mode = 0;
   advance();
+  // while (!match(TOKEN_EOF)) {
+  //   statement();
+  // }
   expression();
   assert_current_and_advance(TOKEN_EOF, "Expected end of expression");
   end_compiler();

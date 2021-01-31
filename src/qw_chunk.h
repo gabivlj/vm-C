@@ -27,6 +27,7 @@ typedef enum {
   OP_GREATER,
   OP_LESS,
 
+  OP_PRINT
 } OpCode;
 
 /// Chunk is a sequence of bytecode

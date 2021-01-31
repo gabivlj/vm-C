@@ -40,6 +40,9 @@ u32 dissasemble_instruction(Chunk* chunk, u32 offset) {
   }
   u8 instruction = chunk->code[offset];
   switch (instruction) {
+    case OP_PRINT: {
+      return simple_instruction("OP_PRINT", offset);
+    }
     case OP_RETURN: {
       return simple_instruction("OP_RETURN", offset);
     }
