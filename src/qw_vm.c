@@ -26,9 +26,16 @@ Value pop() {
   return *(vm.stack_top);
 }
 
-void init_vm() { reset_stack(); }
+void init_vm() {
+  reset_stack();
+  vm.objects = NULL;
+  init_table(&vm.strings);
+}
 
-void free_vm() { free_objects(); }
+void free_vm() {
+  free_objects();
+  free_table(&vm.strings);
+}
 
 static void runtime_error(const char* format, ...) {
   va_list args;
@@ -44,17 +51,29 @@ static void runtime_error(const char* format, ...) {
 static inline void concatenate() {
   ObjectString* right = AS_STRING(pop());
   ObjectString* left = AS_STRING(pop());
-  // +1 because -> length doesn't include the \0
-  left->chars = (char*)reallocate(left->chars, left->length, left->length + right->length + 1);
+  // The hash is done while copying
+  u32 hash = 2166136261u;
+  ObjectString* new_string = allocate_string(left->length + right->length, 0);
+  for (int i = 0, j = 0; i < left->length; i++, j++) {
+    new_string->chars[i] = left->chars[j];
+    hash ^= (u32)new_string->chars[i];
+    hash *= 16777619;
+  }
   // start from the left->length until left->length + right->length copying each char
   for (int i = left->length, j = 0; i < left->length + right->length; i++, j++) {
-    left->chars[i] = right->chars[j];
+    new_string->chars[i] = right->chars[j];
+    hash ^= (u32)new_string->chars[i];
+    hash *= 16777619;
   }
-  // new length (don't include \0)
-  left->length = left->length + right->length;
-  // add at the end the \0
-  left->chars[left->length] = 0;
-  push(OBJECT_VAL(left));
+  new_string->chars[new_string->length] = 0;
+  new_string->hash = hash;
+  // Check if we have an already existing string in the string intern so we reuse its memory address
+  ObjectString* intern_string = table_find_string(&vm.strings, new_string->chars, new_string->length, hash);
+  if (intern_string != NULL) {
+    FREE_ARRAY(char, new_string, new_string->length + 1);
+    new_string = intern_string;
+  }
+  push(OBJECT_VAL(new_string));
 }
 
 static InterpretResult run() {
@@ -200,7 +219,8 @@ static InterpretResult run() {
     if (IS_STRING(right)) {
       ObjectString* right_s = AS_STRING(right);
       ObjectString* left_s = AS_STRING(*left);
-      left->as.boolean = (left_s->length == right_s->length && memcmp(left_s, right_s, left_s->length) == 0) ||
+      // we can compare memory addresses because we use the technique string interning (we reuse string mem. addresses)
+      left->as.boolean = (left_s == right_s) ||
                          // Put memory 8 bytes to 0
                          ((left->as.object = 0));
       left->type = VAL_BOOL;
