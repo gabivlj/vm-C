@@ -3,6 +3,7 @@
 #include <string.h>
 
 #include "./src/qw_chunk.h"
+#include "./src/qw_compiler.h"
 #include "./src/qw_debug.h"
 #include "./src/qw_object.h"
 #include "./src/qw_vm.h"
@@ -15,13 +16,23 @@
 
 static void repl() {
   char line[1024];
+  Chunk chunk;
+  init_chunk(&chunk);
   for (;;) {
     printf("> ");
     if (!fgets(line, sizeof(line), stdin)) {
       printf("\n");
       break;
     }
-    interpret_source(line);
+    ValueArray arr = chunk.constants;
+    init_chunk(&chunk);
+    chunk.constants = arr;
+    if (!compile(line, &chunk)) {
+      continue;
+    }
+    if (!interpret(&chunk)) {
+      continue;
+    }
     print_value(*stack_vm());
     printf("\n");
   }

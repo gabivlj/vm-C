@@ -95,10 +95,11 @@ static InterpretResult run() {
 
 #define READ_STRING() (AS_STRING(READ_CONSTANT_LONG()))
 
-  static void* dispatch_table[] = {
-      &&do_op_return,   &&do_op_constant, &&do_op_constant_long, &&do_op_negate, &&do_op_add,   &&do_op_substract,
-      &&do_op_multiply, &&do_op_divide,   &&do_op_nil,           &&do_op_true,   &&do_op_false, &&do_op_bang,
-      &&do_op_equal,    &&do_op_greater,  &&do_op_less,          &&do_op_print,  &&do_op_pop,   &&do_op_define_global};
+  static void* dispatch_table[] = {&&do_op_return, &&do_op_constant,      &&do_op_constant_long, &&do_op_negate,
+                                   &&do_op_add,    &&do_op_substract,     &&do_op_multiply,      &&do_op_divide,
+                                   &&do_op_nil,    &&do_op_true,          &&do_op_false,         &&do_op_bang,
+                                   &&do_op_equal,  &&do_op_greater,       &&do_op_less,          &&do_op_print,
+                                   &&do_op_pop,    &&do_op_define_global, &&do_op_get_global,    &&do_op_set_global};
 
 /// BinaryOp does a binary operation on the vm
 #define BINARY_OP(value_type, _op_)                                                             \
@@ -275,15 +276,47 @@ static InterpretResult run() {
   }
 
   do_op_define_global : {
-    ObjectString* name = READ_STRING();
+    // ...
+    u16 index = (READ_BYTE() << 8) | READ_BYTE();
 #ifdef DEBUG_TRACE_EXECUTION
-    printf("[DEFINE_GLOBAL] DEFINED GLOBAL: %s\n", name->chars);
+    printf("[DEFINE_GLOBAL] DEFINED GLOBAL: %d\n", index);
     printf("[DEFINE_GLOBAL] VALUE: ");
     print_value(PEEK_STACK(0));
     printf("\n");
 #endif
-    table_set(&vm.globals, name, PEEK_STACK(0));
-    pop();
+    // push_value(vm.chunk->constants)
+    vm.chunk->constants.values[index] = pop();
+    // table_set(&vm.globals, name, PEEK_STACK(0));
+    continue;
+  }
+
+  do_op_get_global : {
+    u16 index = (READ_BYTE() << 8) | READ_BYTE();
+#ifdef DEBUG_TRACE_EXECUTION
+    printf("[GET_GLOBAL] GOT GLOBAL: %s\n", name->chars);
+    if (ok) {
+      printf("[GET_GLOBAL] VALUE:");
+      print_value(value);
+    } else
+      printf("[GET_GLOBAL] VALUE NOT FOUND");
+#endif
+    if (index >= vm.chunk->constants.count) {
+      runtime_error("undefined variable %d", index);
+      return INTERPRET_RUNTIME_ERROR;
+    } else {
+      push(vm.chunk->constants.values[index]);
+    }
+    continue;
+  }
+
+  do_op_set_global : {
+    // ...
+    u16 index = (READ_BYTE() << 8) | READ_BYTE();
+    if (index >= vm.chunk->constants.count) {
+      runtime_error("undefined variable");
+      return INTERPRET_RUNTIME_ERROR;
+    }
+    vm.chunk->constants.values[index] = pop();
     continue;
   }
   }

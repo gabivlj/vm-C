@@ -73,8 +73,14 @@ u32 dissasemble_instruction(Chunk* chunk, u32 offset) {
     case OP_POP: {
       return simple_instruction("OP_POP", offset);
     }
+    case OP_GET_GLOBAL: {
+      return constant_instruction_long("OP_GET_GLOBAL", chunk, offset);
+    }
     case OP_DEFINE_GLOBAL: {
       return constant_instruction_long("OP_DEFINE_GLOBAL", chunk, offset);
+    }
+    case OP_SET_GLOBAL: {
+      return constant_instruction_long("OP_SET_GLOBAL", chunk, offset);
     }
     default: {
       printf("unknown opcode: %d\n", instruction);
