@@ -27,7 +27,11 @@ typedef enum {
   OP_GREATER,
   OP_LESS,
 
-  OP_PRINT
+  OP_PRINT,
+
+  OP_POP,
+
+  OP_DEFINE_GLOBAL,
 } OpCode;
 
 /// Chunk is a sequence of bytecode
@@ -56,6 +60,7 @@ u32 add_constant(Chunk* chunk, Value value);
 u32 add_constant_opcode(Chunk* chunk, Value value, int line);
 
 void write_chunk_u16(Chunk* chunk, u16 bytes, u32 line);
+void write_chunk_u24(Chunk* chunk, u32 bytes, u32 line);
 void write_chunk_u32(Chunk* chunk, u32 bytes, u32 line);
 void write_chunk_u64(Chunk* chunk, u64 bytes, u32 line);
 

@@ -30,6 +30,7 @@ typedef struct {
   ParseFn infix;
   Precedence precedence;
 } ParseRule;
+
 static void binary();
 static void unary();
 static void grouping();
@@ -98,6 +99,21 @@ Chunk* chunk;
 
 static Chunk* current_chunk() { return chunk; }
 
+static inline void emit_byte(u8 byte) { write_chunk(current_chunk(), byte, parser.previous.line); }
+static inline void emit_u16(u16 value) { write_chunk_u16(current_chunk(), value, parser.previous.line); }
+static inline void emit_u24(u32 value) { write_chunk_u24(current_chunk(), value, parser.previous.line); }
+static inline void emit_u32(u32 value) { write_chunk_u32(current_chunk(), value, parser.previous.line); }
+static inline void emit_u64(u64 value) { write_chunk_u64(current_chunk(), value, parser.previous.line); }
+static inline void emit_op_u8(u8 op, u8 value) { emit_u16((op << 8) | value); }
+static inline void emit_op_u16(u8 op, u16 value) { emit_u24((op << 16) | value); }
+// static inline void emit_op_u32(u8 op, u32 value) { emit_u((op << 24) | value); }
+static inline void emit_return() { emit_byte(OP_RETURN); }
+
+static u32 make_constant(Value val) {
+  //
+  return add_constant(current_chunk(), val);
+}
+
 static void error_at(Token* token, const char* message) {
   if (parser.panic_mode) return;
   parser.panic_mode = 1;
@@ -125,6 +141,40 @@ static void advance() {
   }
 }
 
+static bool check(TokenType type) { return parser.current.type == type; }
+
+static bool match(TokenType type) {
+  if (!check(type)) return false;
+  advance();
+  return true;
+}
+
+static void synchronize() {
+  parser.panic_mode = false;
+
+  while (parser.current.type != TOKEN_EOF) {
+    if (parser.previous.type == TOKEN_SEMICOLON) return;
+
+    switch (parser.current.type) {
+      case TOKEN_CLASS:
+      case TOKEN_FUN:
+      case TOKEN_VAR:
+      case TOKEN_FOR:
+      case TOKEN_IF:
+      case TOKEN_WHILE:
+      case TOKEN_PRINT:
+      case TOKEN_RETURN:
+        return;
+
+      default:
+          // Do nothing.
+          ;
+    }
+
+    advance();
+  }
+}
+
 static void expression();
 
 static void parse_precedence(Precedence precedence) {
@@ -142,6 +192,14 @@ static void parse_precedence(Precedence precedence) {
   }
 }
 
+static u16 identifier_constant(Token* name) {
+  // Creates a global constant of the name of the token, also, it will be equal to the next
+  // thing in the stack. Returns the index in which the string of the variable name is stored
+  return make_constant(OBJECT_VAL(copy_string(name->length, name->start)));
+}
+
+static void define_variable(u16 global) { emit_op_u16(OP_DEFINE_GLOBAL, global); }
+
 static void expression() { parse_precedence(PREC_ASSIGNMENT); }
 
 static void assert_current_and_advance(TokenType type, const char* message) {
@@ -152,21 +210,22 @@ static void assert_current_and_advance(TokenType type, const char* message) {
   error_at_current(message);
 }
 
-static bool check(TokenType type) { return parser.current.type == type; }
-
-static bool match(TokenType type) {
-  if (!check(type)) return false;
-  advance();
-  return true;
+static u16 parse_variable(const char* error_message) {
+  assert_current_and_advance(TOKEN_IDENTIFIER, error_message);
+  return identifier_constant(&parser.previous);
 }
 
-static inline void emit_byte(u8 byte) { write_chunk(current_chunk(), byte, parser.previous.line); }
-static inline void emit_u16(u16 value) { write_chunk_u16(current_chunk(), value, parser.previous.line); }
-static inline void emit_u32(u32 value) { write_chunk_u32(current_chunk(), value, parser.previous.line); }
-static inline void emit_u64(u64 value) { write_chunk_u64(current_chunk(), value, parser.previous.line); }
-static inline void emit_op_u8(u8 op, u8 value) { emit_u16((op << 8) | value); }
-static inline void emit_op_u16(u8 op, u16 value) { emit_u32((op << 16) | value); }
-static inline void emit_return() { emit_byte(OP_RETURN); }
+static void var_declaration() {
+  u16 global = parse_variable("Expected a string");
+  if (match(TOKEN_EQUAL)) {
+    expression();
+  } else {
+    emit_byte(OP_NIL);
+  }
+  assert_current_and_advance(TOKEN_SEMICOLON, "Expected ';' after variable declaration");
+  define_variable(global);
+}
+
 static inline void end_compiler() {
   emit_return();
 #ifdef DEBUG_PRINT_CODE
@@ -295,13 +354,30 @@ static void number() {
   emit_constant(NUMBER_VAL(value));
 }
 
+static void expression_statement() {
+  expression();
+  assert_current_and_advance(TOKEN_SEMICOLON, "Expected ';' after expression.");
+  emit_byte(OP_POP);
+}
+
 static void statement() {
   if (match(TOKEN_PRINT)) {
     print_statement();
+  } else {
+    expression_statement();
   }
 }
 
-static void declaration() { statement(); }
+static void declaration() {
+  if (match(TOKEN_VAR)) {
+    var_declaration();
+  } else {
+    statement();
+  }
+  if (parser.panic_mode) {
+    synchronize();
+  }
+}
 
 u8 compile(const char* source, Chunk* chunk_to_add_on) {
   init_scanner(source);
@@ -309,10 +385,10 @@ u8 compile(const char* source, Chunk* chunk_to_add_on) {
   parser.had_error = 0;
   parser.panic_mode = 0;
   advance();
-  // while (!match(TOKEN_EOF)) {
-  //   statement();
-  // }
-  expression();
+  while (!match(TOKEN_EOF)) {
+    declaration();
+  }
+  // expression();
   assert_current_and_advance(TOKEN_EOF, "Expected end of expression");
   end_compiler();
   return !parser.had_error;

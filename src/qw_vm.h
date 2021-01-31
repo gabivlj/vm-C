@@ -23,8 +23,11 @@ typedef struct {
   /// String interning, where the same strings share the same string address
   Table strings;
 
+  Table globals;
+
   /// Objects (as a Linked List) stores all the objects in the VM (so we can access them somehow when GC)
   Object* objects;
+
 } VM;
 
 typedef enum { INTERPRET_OK, INTERPRET_COMPILER_ERROR, INTERPRET_RUNTIME_ERROR } InterpretResult;

@@ -30,11 +30,13 @@ void init_vm() {
   reset_stack();
   vm.objects = NULL;
   init_table(&vm.strings);
+  init_table(&vm.globals);
 }
 
 void free_vm() {
   free_objects();
   free_table(&vm.strings);
+  free_table(&vm.globals);
 }
 
 static void runtime_error(const char* format, ...) {
@@ -86,14 +88,17 @@ static InterpretResult run() {
 #define DISPATCH() goto* dispatch_table[READ_BYTE()]
 
 /// Reads the constant from the constant array
-#define READ_CONSTANT() (vm.chunk->constants.values[READ_BYTE()]);
+#define READ_CONSTANT() (vm.chunk->constants.values[READ_BYTE()])
 
 /// Constant long is able to contain 2 byte constants
 #define READ_CONSTANT_LONG() (vm.chunk->constants.values[(READ_BYTE() << 8) | READ_BYTE()])
-  static void* dispatch_table[] = {&&do_op_return, &&do_op_constant,  &&do_op_constant_long, &&do_op_negate,
-                                   &&do_op_add,    &&do_op_substract, &&do_op_multiply,      &&do_op_divide,
-                                   &&do_op_nil,    &&do_op_true,      &&do_op_false,         &&do_op_bang,
-                                   &&do_op_equal,  &&do_op_greater,   &&do_op_less,          &&do_op_print};
+
+#define READ_STRING() (AS_STRING(READ_CONSTANT_LONG()))
+
+  static void* dispatch_table[] = {
+      &&do_op_return,   &&do_op_constant, &&do_op_constant_long, &&do_op_negate, &&do_op_add,   &&do_op_substract,
+      &&do_op_multiply, &&do_op_divide,   &&do_op_nil,           &&do_op_true,   &&do_op_false, &&do_op_bang,
+      &&do_op_equal,    &&do_op_greater,  &&do_op_less,          &&do_op_print,  &&do_op_pop,   &&do_op_define_global};
 
 /// BinaryOp does a binary operation on the vm
 #define BINARY_OP(value_type, _op_)                                                             \
@@ -138,11 +143,16 @@ static InterpretResult run() {
     DISPATCH();
 
   do_op_return : {
-    Value _ = pop();
-#ifdef DEBUG_TRACE_EXECUTION
-    print_value(_);
-#endif
+    //     Value _ = pop();
+    // #ifdef DEBUG_TRACE_EXECUTION
+    //     print_value(_);
+    // #endif
     return INTERPRET_OK;
+  }
+
+  do_op_pop : {
+    pop();
+    continue;
   }
 
   do_op_print : {
@@ -263,8 +273,22 @@ static InterpretResult run() {
     top->type = VAL_BOOL;
     continue;
   }
+
+  do_op_define_global : {
+    ObjectString* name = READ_STRING();
+#ifdef DEBUG_TRACE_EXECUTION
+    printf("[DEFINE_GLOBAL] DEFINED GLOBAL: %s\n", name->chars);
+    printf("[DEFINE_GLOBAL] VALUE: ");
+    print_value(PEEK_STACK(0));
+    printf("\n");
+#endif
+    table_set(&vm.globals, name, PEEK_STACK(0));
+    pop();
+    continue;
+  }
   }
 #undef READ_BYTE
+#undef READ_STRING
 #undef READ_CONSTANT
 #undef READ_CONSTANT_LONG
 #undef BINARY_OP

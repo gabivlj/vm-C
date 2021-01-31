@@ -49,7 +49,7 @@ ObjectString* copy_string(u32 length, const char* start) {
 void print_object(Value value) {
   switch (OBJECT_TYPE(value)) {
     case OBJECT_STRING: {
-      printf("%s", AS_CSTRING(value));
+      printf("`%s`", AS_CSTRING(value));
       break;
     }
     default: {
