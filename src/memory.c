@@ -20,7 +20,6 @@ static void free_object(Object* object) {
   switch (object->type) {
     case OBJECT_STRING: {
       ObjectString* string = (ObjectString*)object;
-      FREE_ARRAY(char, string->chars, string->length + 1);
       FREE(ObjectString, string);
       break;
     }

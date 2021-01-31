@@ -244,7 +244,7 @@ static void literal() {
 
 static void string() {
   Token t = parser.previous;
-  ObjectString* string = copy_string(t.length, t.start);
+  ObjectString* string = copy_string(t.length - 2, t.start + 1);
   emit_constant(OBJECT_VAL(string));
 }
 
