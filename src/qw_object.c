@@ -57,3 +57,14 @@ void print_object(Value value) {
     }
   }
 }
+
+bool is_truthy(Value* obj) {
+  if (obj->type == VAL_BOOL) {
+    return obj->as.boolean;
+  }
+  if (obj->type == VAL_NIL) return false;
+  if (obj->type == VAL_NUMBER) return obj->as.number > 0.0;
+  // TODO check string
+  if (obj->type == VAL_OBJECT) return true;
+  return false;
+}

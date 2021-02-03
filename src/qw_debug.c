@@ -88,6 +88,9 @@ u32 dissasemble_instruction(Chunk* chunk, u32 offset) {
     case OP_SET_LOCAL: {
       return constant_instruction_long("OP_SET_LOCAL", chunk, offset);
     }
+    case OP_JUMP_IF_FALSE: {
+      return constant_instruction_long("OP_JUMP_IF_FALSE", chunk, offset);
+    }
     default: {
       printf("unknown opcode: %d\n", instruction);
       return offset + 1;

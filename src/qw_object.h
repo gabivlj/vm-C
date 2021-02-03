@@ -36,5 +36,6 @@ Object* allocate_object(ObjectType type, isize true_size);
 
 ObjectString* copy_string(u32 length, const char* start);
 u32 hash_string(char* str, u32 length);
+bool is_truthy(Value* obj);
 
 #endif

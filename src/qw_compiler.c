@@ -138,6 +138,9 @@ static inline void emit_u32(u32 value) { write_chunk_u32(current_chunk(), value,
 static inline void emit_u64(u64 value) { write_chunk_u64(current_chunk(), value, parser.previous.line); }
 static inline void emit_op_u8(u8 op, u8 value) { emit_u16((op << 8) | value); }
 static inline void emit_op_u16(u8 op, u16 value) { emit_u24((op << 16) | value); }
+static inline void emit_op_u32(u8 op, u32 value) {
+  emit_u32((op << 24) | (value << 16) | (value & 0xFF)); /* ! TODO: INCOMPLETE*/
+}
 // static inline void emit_op_u32(u8 op, u32 value) { emit_u((op << 24) | value); }
 static inline void emit_return() { emit_byte(OP_RETURN); }
 
@@ -393,7 +396,7 @@ static i32 parse_variable(const char* error_message, bool mutable) {
   return add_variable_to_global_symbols(&parser.previous, mutable);
 }
 
-/// parses 'var' IDENT = <expression>;
+/// parses ('var' | 'let') IDENT '=' <expression>;
 /// When it's a global variable it will add it into the
 /// symbols table and keep a reference to the index inside the
 /// array of constants (So the VM access directly the global via index)
@@ -546,9 +549,44 @@ static void expression_statement() {
   emit_byte(OP_POP);
 }
 
+/// Returns the pointer to where the instruction starts
+static i32 emit_jump(u8 instruction) {
+  emit_op_u16(instruction, 0xFFFF);
+  return current_chunk()->count - 2;
+}
+
+static void patch_jump(i32 jump_code_slot) {
+  u32 lines_to_jump = current_chunk()->count - jump_code_slot - 2;
+  if (lines_to_jump > UINT16_MAX) {
+    error_at_current("we can't let you do ifs that jump 65000 op codes");
+    return;
+  }
+  current_chunk()->code[jump_code_slot] = (lines_to_jump & 0xFF00) >> 8;
+  current_chunk()->code[jump_code_slot + 1] = lines_to_jump & 0xFF;
+  printf("%d\n", ((lines_to_jump & 0xFF00) | (lines_to_jump & 0xFF)));
+}
+
+static void if_statement() {
+#if USE_PARENS_FOR_IFS
+  assert_current_and_advance(TOKEN_LEFT_PAREN, "Expected '(' before condition");
+#endif
+  expression();
+#if USE_PARENS_FOR_IFS
+  assert_current_and_advance(TOKEN_RIGHT_PAREN, "Expected ')' after condition");
+#endif
+  i32 then_jump = emit_jump(OP_JUMP_IF_FALSE);
+  statement(false);
+  patch_jump(then_jump);
+  if (match(TOKEN_ELSE)) {
+    statement(false);
+  }
+}
+
 static void statement(bool _) {
   if (match(TOKEN_PRINT)) {
     print_statement();
+  } else if (match(TOKEN_IF)) {
+    if_statement();
   } else if (match(TOKEN_LEFT_BRACE)) {
     begin_scope();
     block();
