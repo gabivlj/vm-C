@@ -100,7 +100,7 @@ static InterpretResult run() {
                                    &&do_op_nil,       &&do_op_true,          &&do_op_false,         &&do_op_bang,
                                    &&do_op_equal,     &&do_op_greater,       &&do_op_less,          &&do_op_print,
                                    &&do_op_pop,       &&do_op_define_global, &&do_op_get_global,    &&do_op_set_global,
-                                   &&do_op_get_local, &&do_op_set_local,     &&do_op_jump_if_false};
+                                   &&do_op_get_local, &&do_op_set_local,     &&do_op_jump_if_false, &&do_op_jump};
 
 /// BinaryOp does a binary operation on the vm
 #define BINARY_OP(value_type, _op_)                                                             \
@@ -338,6 +338,12 @@ static InterpretResult run() {
     Value value = PEEK_STACK(0);
     u16 offset = ((READ_BYTE() << 8) | READ_BYTE());
     vm.ip += offset * !is_truthy(&value);
+    continue;
+  }
+
+  do_op_jump : {
+    u16 offset = ((READ_BYTE() << 8) | READ_BYTE());
+    vm.ip += offset;
     continue;
   }
   }

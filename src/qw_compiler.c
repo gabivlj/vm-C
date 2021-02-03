@@ -57,6 +57,8 @@ static void string(bool);
 static void statement(bool);
 static void declaration(bool);
 static void variable(bool);
+static void and_op(bool);
+static void or_op(bool);
 static i32 add_variable_to_global_symbols(Token* name, bool mutable);
 ParseRule rules[] = {
     [TOKEN_LEFT_PAREN] = {grouping, NULL, PREC_NONE},
@@ -81,7 +83,7 @@ ParseRule rules[] = {
     [TOKEN_IDENTIFIER] = {variable, NULL, PREC_NONE},
     [TOKEN_STRING] = {string, NULL, PREC_NONE},
     [TOKEN_NUMBER] = {number, NULL, PREC_NONE},
-    [TOKEN_AND] = {NULL, NULL, PREC_NONE},
+    [TOKEN_AND] = {NULL, and_op, PREC_AND},
     [TOKEN_CLASS] = {NULL, NULL, PREC_NONE},
     [TOKEN_ELSE] = {NULL, NULL, PREC_NONE},
     [TOKEN_FALSE] = {literal, NULL, PREC_NONE},
@@ -89,7 +91,7 @@ ParseRule rules[] = {
     [TOKEN_FUN] = {NULL, NULL, PREC_NONE},
     [TOKEN_IF] = {NULL, NULL, PREC_NONE},
     [TOKEN_NIL] = {literal, NULL, PREC_NONE},
-    [TOKEN_OR] = {NULL, NULL, PREC_NONE},
+    [TOKEN_OR] = {NULL, or_op, PREC_OR},
     [TOKEN_PRINT] = {NULL, NULL, PREC_NONE},
     [TOKEN_RETURN] = {NULL, NULL, PREC_NONE},
     [TOKEN_SUPER] = {NULL, NULL, PREC_NONE},
@@ -561,9 +563,25 @@ static void patch_jump(i32 jump_code_slot) {
     error_at_current("we can't let you do ifs that jump 65000 op codes");
     return;
   }
+  printf("%d %d\n", ((lines_to_jump & 0xFF00) | (lines_to_jump & 0xFF)), jump_code_slot);
   current_chunk()->code[jump_code_slot] = (lines_to_jump & 0xFF00) >> 8;
   current_chunk()->code[jump_code_slot + 1] = lines_to_jump & 0xFF;
-  printf("%d\n", ((lines_to_jump & 0xFF00) | (lines_to_jump & 0xFF)));
+}
+
+static void and_op(bool _) {
+  i32 end_jump = emit_jump(OP_JUMP_IF_FALSE);
+  emit_byte(OP_POP);
+  parse_precedence(PREC_AND);
+  patch_jump(end_jump);
+}
+
+static void or_op(bool _) {
+  i32 else_jump = emit_jump(OP_JUMP_IF_FALSE);
+  i32 end_jump = emit_jump(OP_JUMP);
+  patch_jump(else_jump);
+  emit_byte(OP_POP);
+  parse_precedence(PREC_OR);
+  patch_jump(end_jump);
 }
 
 static void if_statement() {
@@ -574,12 +592,23 @@ static void if_statement() {
 #if USE_PARENS_FOR_IFS
   assert_current_and_advance(TOKEN_RIGHT_PAREN, "Expected ')' after condition");
 #endif
+  // First condition
   i32 then_jump = emit_jump(OP_JUMP_IF_FALSE);
+  // Pop the condition
+  emit_byte(OP_POP);
+  // Parse stmts of if
   statement(false);
+  // Emit else opcode
+  i32 else_jump = emit_jump(OP_JUMP);
+  // Pop the condition
+  emit_byte(OP_POP);
+  // Patch now the if
   patch_jump(then_jump);
+  // Now if there is an else, parse more statements
   if (match(TOKEN_ELSE)) {
     statement(false);
   }
+  patch_jump(else_jump);
 }
 
 static void statement(bool _) {
