@@ -15,6 +15,17 @@ typedef enum {
   VAL_NUMBER,
   VAL_OBJECT,
   VAL_UNDEFINED,
+
+  /// This means that the value type is an internal type that shouldn't be exposed to the user, only used
+  /// in values of hashmaps used in the compiler.
+  /// This type means that the value in the symbol table is immutable and should be used as that.
+  VAL_INTERNAL_COMPILER_IMMUTABLE,
+
+  /// This means that the value type is an internal type that shouldn't be exposed to the user, only used
+  /// in values of hashmaps used in the compiler.
+  /// This type means that the value in the symbol table cam be mutable and can be used as a mutable object (Can be
+  /// reasigned).
+  VAL_INTERNAL_COMPILER_MUTABLE,
 } ValueType;
 
 typedef struct {

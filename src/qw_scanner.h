@@ -59,6 +59,8 @@ typedef enum {
 
   TOKEN_QUESTION,
   TOKEN_DOUBLE_DOT,
+
+  TOKEN_LET
 } TokenType;
 
 typedef struct {

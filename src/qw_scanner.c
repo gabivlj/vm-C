@@ -156,6 +156,8 @@ static TokenType identifier_type() {
       return check_keyword(1, 3, "lse", TOKEN_ELSE);
     case 'i':
       return check_keyword(1, 1, "f", TOKEN_IF);
+    case 'l':
+      return check_keyword(1, 2, "et", TOKEN_LET);
     case 'n':
       return check_keyword(1, 2, "il", TOKEN_NIL);
     case 'o':

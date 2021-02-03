@@ -2,6 +2,7 @@
 
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 
 #include "memory.h"
 #include "qw_common.h"
@@ -32,6 +33,20 @@ typedef struct {
   Precedence precedence;
 } ParseRule;
 
+#define UINT16_COUNT (UINT16_MAX + 1)
+
+typedef struct {
+  Token name;
+  i32 depth;
+  bool mutable;
+} Local;
+
+typedef struct {
+  Local locals[UINT16_COUNT];
+  i32 local_count;
+  i32 scope_depth;
+} Compiler;
+
 static void binary(bool);
 static void unary(bool);
 static void grouping(bool);
@@ -42,7 +57,7 @@ static void string(bool);
 static void statement(bool);
 static void declaration(bool);
 static void variable(bool);
-static u16 identifier_constant(Token* name);
+static i32 add_variable_to_global_symbols(Token* name, bool mutable);
 ParseRule rules[] = {
     [TOKEN_LEFT_PAREN] = {grouping, NULL, PREC_NONE},
     [TOKEN_RIGHT_PAREN] = {NULL, NULL, PREC_NONE},
@@ -98,6 +113,15 @@ typedef struct {
 } Parser;
 
 Parser parser;
+
+Compiler* current = NULL;
+
+static void init_compiler(Compiler* compiler_parameter) {
+  compiler_parameter->local_count = 0;
+  compiler_parameter->scope_depth = 0;
+  current = compiler_parameter;
+}
+
 Chunk* chunk;
 Table symbol_table;
 
@@ -185,15 +209,43 @@ static void synchronize() {
 
 static void expression();
 
+/// Returns the index of the local (in the stack)
+static i32 resolve_local(Compiler* compiler, Token* name) {
+  for (i32 i = compiler->local_count - 1; i >= 0; i--) {
+    Local* local = &compiler->locals[i];
+    if (local->name.length == name->length && memcmp(local->name.start, name->start, name->length) == 0) {
+      if (!local->mutable) {
+        error_at_current("Can't modify `let` ummutable variable");
+      }
+      return i;
+    }
+  }
+  return -1;
+}
+
 /// This is a function that parses a identifier ['=' <expression>]
 static void named_variable(Token name, bool can_assign) {
-  u16 arg = identifier_constant(&name);
+  u8 get_op;
+  u8 set_op;
+  i32 arg = resolve_local(current, &name);
+  if (arg == -1) {
+    arg = add_variable_to_global_symbols(&name, true);
+    if (arg == -1) {
+      error_at_current("cannot reassign (or redeclare) an immutable variable");
+      return;
+    }
+    get_op = OP_GET_GLOBAL;
+    set_op = OP_SET_GLOBAL;
+  } else {
+    get_op = OP_GET_LOCAL;
+    set_op = OP_SET_LOCAL;
+  }
   // This is an assignment
   if (can_assign && match(TOKEN_EQUAL)) {
     expression();
-    emit_op_u16(OP_SET_GLOBAL, arg);
+    emit_op_u16(set_op, (u16)arg);
   } else {
-    emit_op_u16(OP_GET_GLOBAL, arg);
+    emit_op_u16(get_op, (u16)arg);
   }
 }
 
@@ -231,15 +283,24 @@ static void parse_precedence(Precedence precedence) {
   }
 }
 
-static u16 identifier_constant(Token* name) {
+/// Tries to add a (mutable or immutable) variable to the
+/// global symbol. If the passed name exists, and the mutability flag
+/// differs from the value mutability, it will return -1.
+///
+/// TODO: Maybe set an option that if the variable doesn't exist in the symbol table
+///       return -1 as well?
+static i32 add_variable_to_global_symbols(Token* name, bool mutable) {
   ObjectString* str = copy_string(name->length, name->start);
   Value value;
   bool exists = table_get(&symbol_table, str, &value);
   if (exists) {
+    if (mutable && value.type == VAL_INTERNAL_COMPILER_IMMUTABLE ||
+        (!mutable && value.type == VAL_INTERNAL_COMPILER_MUTABLE))
+      return -1;
     return (u16)value.as.number;
   }
   Value nil;
-  value.type = VAL_NUMBER;
+  value.type = mutable ? VAL_INTERNAL_COMPILER_MUTABLE : VAL_INTERNAL_COMPILER_IMMUTABLE;
   nil.type = VAL_NIL;
   value.as.number = make_constant(nil);
   table_set(&symbol_table, str, value);
@@ -249,9 +310,33 @@ static u16 identifier_constant(Token* name) {
   return value.as.number;
 }
 
-static void define_variable(u16 global) { emit_op_u16(OP_DEFINE_GLOBAL, global); }
+/// Defines a new variable, either local or global
+static inline void define_variable(u16 global) {
+  // No need to create a reference to the global position
+  // we already got it in the stack...
+  if (current->scope_depth > 0) {
+    current->locals[current->local_count - 1].depth = current->scope_depth;
+    return;
+  }
+  emit_op_u16(OP_DEFINE_GLOBAL, global);
+}
 
-static void expression() { parse_precedence(PREC_ASSIGNMENT); }
+static inline void expression() { parse_precedence(PREC_ASSIGNMENT); }
+
+static inline void begin_scope() {
+  // : )
+  ++current->scope_depth;
+}
+
+static inline void end_scope() {
+  // : )
+  --current->scope_depth;
+  // Pop out of the scope all the declared variables...
+  while (current->local_count > 0 && current->locals[current->local_count - 1].depth > current->scope_depth) {
+    emit_byte(OP_POP);
+    --current->local_count;
+  }
+}
 
 static void assert_current_and_advance(TokenType type, const char* message) {
   if (parser.current.type == type) {
@@ -261,20 +346,74 @@ static void assert_current_and_advance(TokenType type, const char* message) {
   error_at_current(message);
 }
 
-static u16 parse_variable(const char* error_message) {
-  assert_current_and_advance(TOKEN_IDENTIFIER, error_message);
-  return identifier_constant(&parser.previous);
+static inline void block() {
+  while (!check(TOKEN_RIGHT_BRACE) && !check(TOKEN_EOF)) {
+    declaration(false);
+  }
+  assert_current_and_advance(TOKEN_RIGHT_BRACE, "Expected '}' at the end of the block");
 }
 
-static void var_declaration() {
-  u16 global = parse_variable("Expected a string");
+/// Adds a local to the local array
+/// Marks it as unitialized, make sure of calling declare_variable after this is called
+static void add_local(Token name, bool mutable) {
+  if (current->local_count == UINT16_COUNT) {
+    error_at_current("Too many local variables in function");
+    return;
+  }
+  for (i32 i = current->local_count - 1; i >= 0; i--) {
+    Local* local = &current->locals[i];
+    if (local->depth == -1 && local->depth < current->scope_depth) {
+      break;
+    }
+    if (local->name.length == name.length && memcmp(name.start, local->name.start, name.length) == 0) {
+      error_at_current("you cannot redeclare the same variable name");
+    }
+  }
+  Local* local = &current->locals[current->local_count++];
+  local->name = name;
+  local->depth = -1;
+  local->mutable = mutable;
+}
+
+static void try_declare_local_variable(bool mutable) {
+  if (current->scope_depth == 0) {
+    return;
+  }
+  Token* name = &parser.previous;
+  add_local(*name, mutable);
+}
+
+/// parse_variable will check the token_identifier, try to declare a local or global variable
+/// using the techniques mentioned in `var_declaration`
+static i32 parse_variable(const char* error_message, bool mutable) {
+  assert_current_and_advance(TOKEN_IDENTIFIER, error_message);
+  try_declare_local_variable(mutable);
+  // we check the scope_depth the lookup of local variables are different than global
+  if (current->scope_depth > 0) return 0;
+  return add_variable_to_global_symbols(&parser.previous, mutable);
+}
+
+/// parses 'var' IDENT = <expression>;
+/// When it's a global variable it will add it into the
+/// symbols table and keep a reference to the index inside the
+/// array of constants (So the VM access directly the global via index)
+/// If it's in a local scope, it will just predict the index of the stack
+/// and keep an index to it inside the compiler.locals, adding a new local
+static void var_declaration(bool mutable) {
+  i32 global = parse_variable("Expected a valid identifier", mutable);
+  if (global == -1) {
+    error_at_current("Can't redeclare an immutable/mutable variable...");
+    return;
+  }
+  // Put in the stack the value
   if (match(TOKEN_EQUAL)) {
     expression();
   } else {
     emit_byte(OP_NIL);
   }
   assert_current_and_advance(TOKEN_SEMICOLON, "Expected ';' after variable declaration");
-  define_variable(global);
+  // Define the global variable if it's a global variable
+  define_variable((u16)global);
 }
 
 static inline void end_compiler() {
@@ -410,6 +549,10 @@ static void expression_statement() {
 static void statement(bool _) {
   if (match(TOKEN_PRINT)) {
     print_statement();
+  } else if (match(TOKEN_LEFT_BRACE)) {
+    begin_scope();
+    block();
+    end_scope();
   } else {
     expression_statement();
   }
@@ -417,7 +560,9 @@ static void statement(bool _) {
 
 static void declaration(bool _) {
   if (match(TOKEN_VAR)) {
-    var_declaration();
+    var_declaration(true);
+  } else if (match(TOKEN_LET)) {
+    var_declaration(false);
   } else {
     statement(false);
   }
@@ -430,6 +575,8 @@ u8 compile(const char* source, Chunk* chunk_to_add_on) {
   // if (symbol_table.capacity != 0) free_table(&symbol_table);
   if (symbol_table.capacity == 0) init_table(&symbol_table);
   init_scanner(source);
+  Compiler compiler;
+  init_compiler(&compiler);
   chunk = chunk_to_add_on;
   parser.had_error = 0;
   parser.panic_mode = 0;
