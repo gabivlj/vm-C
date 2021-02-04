@@ -60,7 +60,12 @@ typedef enum {
   TOKEN_QUESTION,
   TOKEN_DOUBLE_DOT,
 
-  TOKEN_LET
+  TOKEN_LET,
+  TOKEN_WHEN,
+  TOKEN_BAR,
+  TOKEN_AMPERSAND,
+  TOKEN_DOUBLE_POINT,
+  TOKEN_MINUS_ARROW
 } TokenType;
 
 typedef struct {

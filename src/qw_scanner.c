@@ -171,7 +171,16 @@ static TokenType identifier_type() {
     case 'v':
       return check_keyword(1, 2, "ar", TOKEN_VAR);
     case 'w':
-      return check_keyword(1, 4, "hile", TOKEN_WHILE);
+      if (scanner.start[1] != 'h') break;
+      if (scanner.current - scanner.start <= 2) break;
+      switch (scanner.start[2]) {
+        case 'e':
+          return check_keyword(3, 1, "n", TOKEN_WHEN);
+        case 'i':
+          return check_keyword(3, 2, "le", TOKEN_WHILE);
+      }
+      break;
+      // return check_keyword(1, 4, "hile", TOKEN_WHILE);
   }
   return TOKEN_IDENTIFIER;
 }
@@ -213,9 +222,9 @@ Token scan_token() {
     case ',':
       return make_token(TOKEN_COMMA);
     case '.':
-      return make_token(TOKEN_DOT);
+      return make_token(MATCH_PEEK('.', TOKEN_DOUBLE_POINT, TOKEN_DOT));
     case '-':
-      return make_token(TOKEN_MINUS);
+      return make_token(MATCH_PEEK('>', TOKEN_MINUS_ARROW, TOKEN_MINUS));
     case '+':
       return make_token(TOKEN_PLUS);
     case '/':

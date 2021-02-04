@@ -1,3 +1,35 @@
+/*
+
+  Do the 'when' statement, defined as:
+
+    when ::= 'when' expression '{'
+      (when_expression '->' statement ',')*
+      'nothing' '->' statement
+    '}'
+
+    when_expression ::= expression [(when_operators expression)+ | '..' expression]
+
+    when_operators ::= '|'
+
+    SAMPLE CODE;
+      var x = 3;
+      when x {
+
+        0..100 -> {
+          print "good!";
+        },
+
+        -1 | "WTF, A STRING TOO!?" -> {
+          print "that works too!";
+        }
+
+        nothing -> {
+          print "expected value between 0 and 100";
+        }
+
+      }
+*/
+
 #include "qw_compiler.h"
 
 #include <stdio.h>
@@ -557,13 +589,15 @@ static i32 emit_jump(u8 instruction) {
   return current_chunk()->count - 2;
 }
 
+/// Patch jump passes the position where the jump instruction is and patches the operands
+/// with the value of `current_chunk()->count - jump_code_slot-2`, which is the number of lines
 static void patch_jump(i32 jump_code_slot) {
   u32 lines_to_jump = current_chunk()->count - jump_code_slot - 2;
   if (lines_to_jump > UINT16_MAX) {
     error_at_current("we can't let you do ifs that jump 65000 op codes");
     return;
   }
-  printf("%d %d\n", ((lines_to_jump & 0xFF00) | (lines_to_jump & 0xFF)), jump_code_slot);
+  // printf("%d %d\n", ((lines_to_jump & 0xFF00) | (lines_to_jump & 0xFF)), jump_code_slot);
   current_chunk()->code[jump_code_slot] = (lines_to_jump & 0xFF00) >> 8;
   current_chunk()->code[jump_code_slot + 1] = lines_to_jump & 0xFF;
 }
@@ -585,11 +619,11 @@ static void or_op(bool _) {
 }
 
 static void if_statement() {
-#if USE_PARENS_FOR_IFS
+#if USE_PARENS_FOR_STATEMENT_CONDITIONS
   assert_current_and_advance(TOKEN_LEFT_PAREN, "Expected '(' before condition");
 #endif
   expression();
-#if USE_PARENS_FOR_IFS
+#if USE_PARENS_FOR_STATEMENT_CONDITIONS
   assert_current_and_advance(TOKEN_RIGHT_PAREN, "Expected ')' after condition");
 #endif
   // First condition
@@ -611,15 +645,88 @@ static void if_statement() {
   patch_jump(else_jump);
 }
 
+static void emit_loop(i32 start) {
+  // + 3 because we have to jump over OP_JUMP_BACK and its 2 bytes (operands)
+  emit_op_u16(OP_JUMP_BACK, chunk->count - start + 3);
+}
+
+static void while_statement() {
+#if USE_PARENS_FOR_STATEMENT_CONDITIONS
+  assert_current_and_advance(TOKEN_LEFT_PAREN, "Expected '(' before condition");
+#endif
+  i32 condition_start = current_chunk()->count;
+  expression();
+#if USE_PARENS_FOR_STATEMENT_CONDITIONS
+  assert_current_and_advance(TOKEN_RIGHT_PAREN, "Expected ')' after condition");
+#endif
+  i32 jump = emit_jump(OP_JUMP_IF_FALSE);
+  emit_byte(OP_POP);
+  statement(false);
+  emit_loop(condition_start);
+  patch_jump(jump);
+  emit_byte(OP_POP);
+}
+
+static void for_statement() {
+  begin_scope();
+  assert_current_and_advance(TOKEN_LEFT_PAREN, "Expected '(' after 'for'");
+
+  if (match(TOKEN_SEMICOLON)) {
+    // nothing bro...
+  } else if (match(TOKEN_VAR)) {
+    var_declaration(true);
+  } else if (match(TOKEN_LET)) {
+    var_declaration(false);
+  } else {
+    // do this because expression statement expects a ';'
+    expression_statement();
+  }
+
+  i32 loop_start = current_chunk()->count;
+
+  i32 jump = -1;
+
+  if (!match(TOKEN_SEMICOLON)) {
+    expression();
+    assert_current_and_advance(TOKEN_SEMICOLON, "Expected ; after second expression on for");
+    jump = emit_jump(OP_JUMP_IF_FALSE);
+    // pop prev. expression
+    emit_byte(OP_POP);
+  }
+
+  if (!match(TOKEN_RIGHT_PAREN)) {
+    i32 jump_condition = emit_jump(OP_JUMP);
+    i32 start_increment = current_chunk()->count;
+    expression();
+    assert_current_and_advance(TOKEN_RIGHT_PAREN, "Expected ')' after 'for'");
+    emit_byte(OP_POP);
+    emit_loop(loop_start);
+    patch_jump(jump_condition);
+    loop_start = start_increment;
+  }
+
+  statement(false);
+
+  emit_loop(loop_start);
+
+  if (jump != -1) patch_jump(jump);
+
+  end_scope();
+}
+
 static void statement(bool _) {
   if (match(TOKEN_PRINT)) {
     print_statement();
   } else if (match(TOKEN_IF)) {
     if_statement();
+  } else if (match(TOKEN_WHILE)) {
+    while_statement();
   } else if (match(TOKEN_LEFT_BRACE)) {
     begin_scope();
     block();
     end_scope();
+  } else if (match(TOKEN_FOR)) {
+    for_statement();
   } else {
     expression_statement();
   }

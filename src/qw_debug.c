@@ -58,6 +58,12 @@ u32 dissasemble_instruction(Chunk* chunk, u32 offset) {
     case OP_ADD: {
       return simple_instruction("OP_ADD", offset);
     }
+    case OP_LESS: {
+      return simple_instruction("OP_LESS", offset);
+    }
+    case OP_GREATER: {
+      return simple_instruction("OP_GREATER", offset);
+    }
     case OP_SUBTRACT: {
       return simple_instruction("OP_SUBTRACT", offset);
     }
@@ -90,6 +96,9 @@ u32 dissasemble_instruction(Chunk* chunk, u32 offset) {
     }
     case OP_JUMP_IF_FALSE: {
       return constant_instruction_long("OP_JUMP_IF_FALSE", chunk, offset);
+    }
+    case OP_JUMP_BACK: {
+      return constant_instruction_long("OP_JUMP_BACK", chunk, offset);
     }
     case OP_JUMP: {
       return constant_instruction_long("OP_JUMP", chunk, offset);

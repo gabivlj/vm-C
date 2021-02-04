@@ -95,12 +95,12 @@ static InterpretResult run() {
 
 #define READ_STRING() (AS_STRING(READ_CONSTANT_LONG()))
 
-  static void* dispatch_table[] = {&&do_op_return,    &&do_op_constant,      &&do_op_constant_long, &&do_op_negate,
-                                   &&do_op_add,       &&do_op_substract,     &&do_op_multiply,      &&do_op_divide,
-                                   &&do_op_nil,       &&do_op_true,          &&do_op_false,         &&do_op_bang,
-                                   &&do_op_equal,     &&do_op_greater,       &&do_op_less,          &&do_op_print,
-                                   &&do_op_pop,       &&do_op_define_global, &&do_op_get_global,    &&do_op_set_global,
-                                   &&do_op_get_local, &&do_op_set_local,     &&do_op_jump_if_false, &&do_op_jump};
+  static void* dispatch_table[] = {
+      &&do_op_return,    &&do_op_constant,  &&do_op_constant_long, &&do_op_negate,     &&do_op_add,
+      &&do_op_substract, &&do_op_multiply,  &&do_op_divide,        &&do_op_nil,        &&do_op_true,
+      &&do_op_false,     &&do_op_bang,      &&do_op_equal,         &&do_op_greater,    &&do_op_less,
+      &&do_op_print,     &&do_op_pop,       &&do_op_define_global, &&do_op_get_global, &&do_op_set_global,
+      &&do_op_get_local, &&do_op_set_local, &&do_op_jump_if_false, &&do_op_jump,       &&do_op_jump_back};
 
 /// BinaryOp does a binary operation on the vm
 #define BINARY_OP(value_type, _op_)                                                             \
@@ -316,9 +316,11 @@ static InterpretResult run() {
       runtime_error("undefined variable");
       return INTERPRET_RUNTIME_ERROR;
     }
-    vm.chunk->constants.values[index] = pop();
+    vm.chunk->constants.values[index] = PEEK_STACK(0);  // << holy fuck, be careful, this SHOULD be popped by the
+                                                        // variable declaration or expression_stmt Not by this operation
     continue;
   }
+
   do_op_get_local : {
     //
     u16 slot = (READ_BYTE() << 8) | READ_BYTE();
@@ -344,6 +346,12 @@ static InterpretResult run() {
   do_op_jump : {
     u16 offset = ((READ_BYTE() << 8) | READ_BYTE());
     vm.ip += offset;
+    continue;
+  }
+
+  do_op_jump_back : {
+    u16 offset = ((READ_BYTE() << 8) | READ_BYTE());
+    vm.ip -= offset;
     continue;
   }
   }
