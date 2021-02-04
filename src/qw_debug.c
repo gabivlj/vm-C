@@ -61,6 +61,12 @@ u32 dissasemble_instruction(Chunk* chunk, u32 offset) {
     case OP_LESS: {
       return simple_instruction("OP_LESS", offset);
     }
+    case OP_EQUAL: {
+      return simple_instruction("OP_EQUAL", offset);
+    }
+    case OP_PUSH_TOP: {
+      return simple_instruction("OP_PUSH_TOP", offset);
+    }
     case OP_GREATER: {
       return simple_instruction("OP_GREATER", offset);
     }

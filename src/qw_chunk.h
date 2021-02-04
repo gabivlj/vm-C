@@ -38,7 +38,9 @@ typedef enum {
   OP_SET_LOCAL,
   OP_JUMP_IF_FALSE,
   OP_JUMP,
-  OP_JUMP_BACK
+  OP_JUMP_BACK,
+  // Pushes again the same element to the stack
+  OP_PUSH_TOP,
 } OpCode;
 
 /// Chunk is a sequence of bytecode

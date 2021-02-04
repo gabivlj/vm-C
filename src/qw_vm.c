@@ -79,6 +79,7 @@ static inline void concatenate() {
 }
 
 static InterpretResult run() {
+  u8* initial = vm.ip;
 /// Returns the value of the current instrucction
 /// and advances instruction pointer to the next byte
 #define READ_BYTE() (*(vm.ip++))
@@ -95,12 +96,13 @@ static InterpretResult run() {
 
 #define READ_STRING() (AS_STRING(READ_CONSTANT_LONG()))
 
-  static void* dispatch_table[] = {
-      &&do_op_return,    &&do_op_constant,  &&do_op_constant_long, &&do_op_negate,     &&do_op_add,
-      &&do_op_substract, &&do_op_multiply,  &&do_op_divide,        &&do_op_nil,        &&do_op_true,
-      &&do_op_false,     &&do_op_bang,      &&do_op_equal,         &&do_op_greater,    &&do_op_less,
-      &&do_op_print,     &&do_op_pop,       &&do_op_define_global, &&do_op_get_global, &&do_op_set_global,
-      &&do_op_get_local, &&do_op_set_local, &&do_op_jump_if_false, &&do_op_jump,       &&do_op_jump_back};
+  static void* dispatch_table[] = {&&do_op_return,    &&do_op_constant,      &&do_op_constant_long, &&do_op_negate,
+                                   &&do_op_add,       &&do_op_substract,     &&do_op_multiply,      &&do_op_divide,
+                                   &&do_op_nil,       &&do_op_true,          &&do_op_false,         &&do_op_bang,
+                                   &&do_op_equal,     &&do_op_greater,       &&do_op_less,          &&do_op_print,
+                                   &&do_op_pop,       &&do_op_define_global, &&do_op_get_global,    &&do_op_set_global,
+                                   &&do_op_get_local, &&do_op_set_local,     &&do_op_jump_if_false, &&do_op_jump,
+                                   &&do_op_jump_back, &&do_push_again};
 
 /// BinaryOp does a binary operation on the vm
 #define BINARY_OP(value_type, _op_)                                                             \
@@ -340,18 +342,29 @@ static InterpretResult run() {
     Value value = PEEK_STACK(0);
     u16 offset = ((READ_BYTE() << 8) | READ_BYTE());
     vm.ip += offset * !is_truthy(&value);
+#if 1
+    printf("[OP_JUMP_IF_FALSE] Jumping %d -> %d by %d\n", (vm.ip - initial) - offset - 3, (vm.ip - initial),
+           offset + 3);
+#endif
     continue;
   }
 
   do_op_jump : {
     u16 offset = ((READ_BYTE() << 8) | READ_BYTE());
     vm.ip += offset;
+#if 1
+    printf("[OP_JUMP] Jumping %d -> %d by %d\n", (vm.ip - initial) - offset - 3, (vm.ip - initial), offset + 3);
+#endif
     continue;
   }
-
+    // var x = 2; when x { 4 | 3 | 1-> print "really good"; 3 | 10 | 32 ->print "cool"; nothing -> print "bad"; }
   do_op_jump_back : {
     u16 offset = ((READ_BYTE() << 8) | READ_BYTE());
     vm.ip -= offset;
+    continue;
+  }
+  do_push_again : {
+    push(PEEK_STACK(0));
     continue;
   }
   }

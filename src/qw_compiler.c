@@ -135,6 +135,9 @@ ParseRule rules[] = {
     [TOKEN_DOUBLE_DOT] = {NULL, NULL, PREC_NONE},
     [TOKEN_ERROR] = {NULL, NULL, PREC_NONE},
     [TOKEN_EOF] = {NULL, NULL, PREC_NONE},
+    [TOKEN_DOUBLE_POINT] = {NULL, NULL, PREC_NONE},
+    [TOKEN_MINUS_ARROW] = {NULL, NULL, PREC_NONE},
+    [TOKEN_NOTHING] = {NULL, NULL, PREC_NONE},
 };
 
 static ParseRule* get_rule(TokenType type) { return &rules[type]; }
@@ -714,9 +717,88 @@ static void for_statement() {
   end_scope();
 }
 
+static void when_condition();
+static void handle_token_bar() {
+  // This is the equivalent of doing an OR
+  i32 else_jump = emit_jump(OP_JUMP_IF_FALSE);
+  i32 end_jump = emit_jump(OP_JUMP);
+  patch_jump(else_jump);
+  // Pop previous condition
+  emit_byte(OP_POP);
+  // Try again
+  when_condition();
+  // Set the jump to this if true
+  patch_jump(end_jump);
+}
+
+//  var x = 2; when x { 4 | 3 | 1-> print "really good"; 3 | 10 | 32 ->print "cool"; 0..10 -> print "enters the range!";
+//  nothing -> print "bad"; }
+// prints bad
+static void when_condition() {
+  // Repeat the same value
+  emit_byte(OP_PUSH_TOP);
+  expression();
+  if (match(TOKEN_BAR)) {
+    emit_byte(OP_EQUAL);
+    handle_token_bar();
+  } else if (match(TOKEN_DOUBLE_POINT)) {
+    emit_byte(OP_GREATER);
+    i32 jump = emit_jump(OP_JUMP_IF_FALSE);
+    emit_byte(OP_POP);
+    expression();
+    emit_byte(OP_LESS);
+    patch_jump(jump);
+    // Keep checking token_bars
+    if (match(TOKEN_BAR)) {
+      handle_token_bar();
+    }
+  } else {
+    emit_byte(OP_EQUAL);
+  }
+}
+
+static i32 do_when_condition() {
+  when_condition();
+  i32 to_jump = emit_jump(OP_JUMP_IF_FALSE);
+  assert_current_and_advance(TOKEN_MINUS_ARROW, "expected arrow...");
+  statement(false);
+  // Pop out the condition
+  emit_byte(OP_POP);
+  i32 jump = emit_jump(OP_JUMP);
+  patch_jump(to_jump);
+  // Pop out the condition
+  emit_byte(OP_POP);
+  return jump;
+}
+
+static void when_statement() {
+  // Get the expression on top of the stack
+  expression();
+
+  assert_current_and_advance(TOKEN_LEFT_BRACE, "Expected brace TODO ERROR");
+
+  i32 jumps[64] = {};
+  u8 i = 0;
+  while (!match(TOKEN_NOTHING)) {
+    jumps[i] = do_when_condition();
+    i++;
+    // DO LOTS OF STUFF BRO
+  }
+  assert_current_and_advance(TOKEN_MINUS_ARROW, "Expected arrow");
+  statement(false);
+  if (i > 0) emit_byte(OP_POP);
+  for (int j = 0; j < i; j++) {
+    patch_jump(jumps[j]);
+  }
+  assert_current_and_advance(TOKEN_RIGHT_BRACE, "Expected brace TODO ERROR");
+  emit_byte(OP_POP);
+}
+
 static void statement(bool _) {
   if (match(TOKEN_PRINT)) {
     print_statement();
+  } else if (match(TOKEN_WHEN)) {
+    when_statement();
   } else if (match(TOKEN_IF)) {
     if_statement();
   } else if (match(TOKEN_WHILE)) {

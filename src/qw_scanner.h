@@ -65,7 +65,8 @@ typedef enum {
   TOKEN_BAR,
   TOKEN_AMPERSAND,
   TOKEN_DOUBLE_POINT,
-  TOKEN_MINUS_ARROW
+  TOKEN_MINUS_ARROW,
+  TOKEN_NOTHING,
 } TokenType;
 
 typedef struct {

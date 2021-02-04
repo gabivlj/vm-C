@@ -147,6 +147,25 @@ static TokenType identifier_type() {
       }
       break;
     }
+    case 'w':
+      if (scanner.start[1] != 'h') break;
+      if (scanner.current - scanner.start <= 2) break;
+      switch (scanner.start[2]) {
+        case 'e':
+          return check_keyword(3, 1, "n", TOKEN_WHEN);
+        case 'i':
+          return check_keyword(3, 2, "le", TOKEN_WHILE);
+      }
+      break;
+    case 'n':
+      if (scanner.current - scanner.start <= 1) break;
+      switch (scanner.start[1]) {
+        case 'i':
+          return check_keyword(2, 1, "l", TOKEN_NIL);
+        case 'o':
+          return check_keyword(2, 5, "thing", TOKEN_NOTHING);
+      }
+      break;
     // Simple cases
     case 'a':
       return check_keyword(1, 2, "nd", TOKEN_AND);
@@ -158,8 +177,6 @@ static TokenType identifier_type() {
       return check_keyword(1, 1, "f", TOKEN_IF);
     case 'l':
       return check_keyword(1, 2, "et", TOKEN_LET);
-    case 'n':
-      return check_keyword(1, 2, "il", TOKEN_NIL);
     case 'o':
       return check_keyword(1, 1, "r", TOKEN_OR);
     case 'p':
@@ -170,16 +187,7 @@ static TokenType identifier_type() {
       return check_keyword(1, 4, "uper", TOKEN_SUPER);
     case 'v':
       return check_keyword(1, 2, "ar", TOKEN_VAR);
-    case 'w':
-      if (scanner.start[1] != 'h') break;
-      if (scanner.current - scanner.start <= 2) break;
-      switch (scanner.start[2]) {
-        case 'e':
-          return check_keyword(3, 1, "n", TOKEN_WHEN);
-        case 'i':
-          return check_keyword(3, 2, "le", TOKEN_WHILE);
-      }
-      break;
+
       // return check_keyword(1, 4, "hile", TOKEN_WHILE);
   }
   return TOKEN_IDENTIFIER;
@@ -229,6 +237,8 @@ Token scan_token() {
       return make_token(TOKEN_PLUS);
     case '/':
       return make_token(TOKEN_SLASH);
+    case '|':
+      return make_token(TOKEN_BAR);
     case '*':
       return make_token(TOKEN_STAR);
     case '!':
