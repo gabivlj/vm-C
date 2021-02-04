@@ -105,15 +105,15 @@ static InterpretResult run() {
                                    &&do_op_jump_back, &&do_push_again};
 
 /// BinaryOp does a binary operation on the vm
-#define BINARY_OP(value_type, _op_)                                                             \
-  /* Equivalent of popping two values and making the operation and then pushing to the stack */ \
-  do {                                                                                          \
-    if (!IS_NUMBER(PEEK_STACK(1)) || !IS_NUMBER(PEEK_STACK(0))) {                               \
-      runtime_error("Operands must be numbers");                                                \
-      return INTERPRET_RUNTIME_ERROR;                                                           \
-    }                                                                                           \
-    double b = AS_NUMBER(pop());                                                                \
-    (*(vm.stack_top - 1)) = value_type(AS_NUMBER(*(vm.stack_top - 1)) _op_ b);                  \
+#define BINARY_OP(value_type, _op_)                                                                  \
+  /* Equivalent of popping two values and making the operation and then pushing to the stack */      \
+  do {                                                                                               \
+    if (!IS_NUMBER(PEEK_STACK(1)) || !IS_NUMBER(PEEK_STACK(0))) {                                    \
+      runtime_error("Operands %d, %d, must be numbers", (PEEK_STACK(1)).type, (PEEK_STACK(0)).type); \
+      return INTERPRET_RUNTIME_ERROR;                                                                \
+    }                                                                                                \
+    double b = AS_NUMBER(pop());                                                                     \
+    (*(vm.stack_top - 1)) = value_type(AS_NUMBER(*(vm.stack_top - 1)) _op_ b);                       \
   } while (false);
 
 #ifdef DEBUG_TRACE_EXECUTION
@@ -296,12 +296,12 @@ static InterpretResult run() {
   do_op_get_global : {
     u16 index = (READ_BYTE() << 8) | READ_BYTE();
 #ifdef DEBUG_TRACE_EXECUTION
-    printf("[GET_GLOBAL] GOT GLOBAL: %s\n", name->chars);
-    if (ok) {
-      printf("[GET_GLOBAL] VALUE:");
-      print_value(value);
-    } else
-      printf("[GET_GLOBAL] VALUE NOT FOUND");
+    // printf("[GET_GLOBAL] GOT GLOBAL: %s\n", name->chars);
+    // if (ok) {
+    //   printf("[GET_GLOBAL] VALUE:");
+    //   print_value(value);
+    // } else
+    //   printf("[GET_GLOBAL] VALUE NOT FOUND");
 #endif
     if (index >= vm.chunk->constants.count) {
       runtime_error("undefined variable %d", index);
@@ -342,19 +342,19 @@ static InterpretResult run() {
     Value value = PEEK_STACK(0);
     u16 offset = ((READ_BYTE() << 8) | READ_BYTE());
     vm.ip += offset * !is_truthy(&value);
-#if 1
-    printf("[OP_JUMP_IF_FALSE] Jumping %d -> %d by %d\n", (vm.ip - initial) - offset - 3, (vm.ip - initial),
-           offset + 3);
-#endif
+    // #if DEBUG_TRACE_EXECUTION
+    //     printf("[OP_JUMP_IF_FALSE] Jumping %d -> %d by %d\n", (vm.ip - initial) - offset - 3, (vm.ip - initial),
+    //            offset + 3);
+    // #endif
     continue;
   }
 
   do_op_jump : {
     u16 offset = ((READ_BYTE() << 8) | READ_BYTE());
     vm.ip += offset;
-#if 1
-    printf("[OP_JUMP] Jumping %d -> %d by %d\n", (vm.ip - initial) - offset - 3, (vm.ip - initial), offset + 3);
-#endif
+    // #if DEBUG_TRACE_EXECUTION
+    //     printf("[OP_JUMP] Jumping %d -> %d by %d\n", (vm.ip - initial) - offset - 3, (vm.ip - initial), offset + 3);
+    //#endif
     continue;
   }
     // var x = 2; when x { 4 | 3 | 1-> print "really good"; 3 | 10 | 32 ->print "cool"; nothing -> print "bad"; }

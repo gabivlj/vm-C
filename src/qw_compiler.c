@@ -1,33 +1,5 @@
 /*
 
-  Do the 'when' statement, defined as:
-
-    when ::= 'when' expression '{'
-      (when_expression '->' statement ',')*
-      'nothing' '->' statement
-    '}'
-
-    when_expression ::= expression [(when_operators expression)+ | '..' expression]
-
-    when_operators ::= '|'
-
-    SAMPLE CODE;
-      var x = 3;
-      when x {
-
-        0..100 -> {
-          print "good!";
-        },
-
-        -1 | "WTF, A STRING TOO!?" -> {
-          print "that works too!";
-        }
-
-        nothing -> {
-          print "expected value between 0 and 100";
-        }
-
-      }
 */
 
 #include "qw_compiler.h"
@@ -712,7 +684,10 @@ static void for_statement() {
 
   emit_loop(loop_start);
 
-  if (jump != -1) patch_jump(jump);
+  if (jump != -1) {
+    patch_jump(jump);
+    // emit_byte(OP_POP);
+  }
 
   end_scope();
 }
@@ -731,9 +706,6 @@ static void handle_token_bar() {
   patch_jump(end_jump);
 }
 
-//  var x = 2; when x { 4 | 3 | 1-> print "really good"; 3 | 10 | 32 ->print "cool"; 0..10 -> print "enters the range!";
-//  nothing -> print "bad"; }
-// prints bad
 static void when_condition() {
   // Repeat the same value
   emit_byte(OP_PUSH_TOP);
@@ -745,6 +717,7 @@ static void when_condition() {
     emit_byte(OP_GREATER);
     i32 jump = emit_jump(OP_JUMP_IF_FALSE);
     emit_byte(OP_POP);
+    emit_byte(OP_PUSH_TOP);
     expression();
     emit_byte(OP_LESS);
     patch_jump(jump);
@@ -761,8 +734,8 @@ static i32 do_when_condition() {
   when_condition();
   i32 to_jump = emit_jump(OP_JUMP_IF_FALSE);
   assert_current_and_advance(TOKEN_MINUS_ARROW, "expected arrow...");
+  // emit_byte(OP_POP);
   statement(false);
-  // Pop out the condition
   emit_byte(OP_POP);
   i32 jump = emit_jump(OP_JUMP);
   patch_jump(to_jump);
@@ -771,27 +744,38 @@ static i32 do_when_condition() {
   return jump;
 }
 
+// Parses and generates bytecode for the following grammar rules
+// ```
+//     when ::= 'when' expression '{'
+//       (when_expression '->' statement)*
+//       'nothing' '->' statement
+//     '}'
+//     when_expression ::= expression (when_operators expression)*
+//     when_operators ::= '|' | '..'
+// ```
 static void when_statement() {
   // Get the expression on top of the stack
   expression();
-
   assert_current_and_advance(TOKEN_LEFT_BRACE, "Expected brace TODO ERROR");
-
+  // Maximum 64 Jumps. NOTE: Maybe we should do it dynamic?
   i32 jumps[64] = {};
   u8 i = 0;
+  // Meanwhile we don't arrive at the last condition, keep getting jumps
   while (!match(TOKEN_NOTHING)) {
     jumps[i] = do_when_condition();
     i++;
-    // DO LOTS OF STUFF BRO
   }
+  // Check that we got a -> next to the nothing
   assert_current_and_advance(TOKEN_MINUS_ARROW, "Expected arrow");
+  // parse the statement next to ->
   statement(false);
-  if (i > 0) emit_byte(OP_POP);
+  // Emit a pop (for the expression(); we parsed before)
+  // emit_byte(OP_POP);
   for (int j = 0; j < i; j++) {
     patch_jump(jumps[j]);
   }
-  assert_current_and_advance(TOKEN_RIGHT_BRACE, "Expected brace TODO ERROR");
   emit_byte(OP_POP);
+  assert_current_and_advance(TOKEN_RIGHT_BRACE, "Expected brace TODO ERROR");
 }
 
 static void statement(bool _) {
