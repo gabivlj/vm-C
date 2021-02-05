@@ -2,6 +2,7 @@
 #define qw_object_h
 
 #include "memory.h"
+#include "qw_chunk.h"
 #include "qw_common.h"
 #include "qw_values.h"
 
@@ -15,6 +16,14 @@ struct ObjectString {
   u64 hash;
   isize length;
   char chars[];
+};
+
+struct ObjectFunction {
+  Object object;
+  u32 number_of_parameters;
+  // Compiled bytecode
+  Chunk chunk;
+  ObjectString* name;
 };
 
 #define OBJECT_TYPE(value) (AS_OBJECT(value)->type)

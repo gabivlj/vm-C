@@ -36,6 +36,7 @@ static void repl() {
     print_value(*stack_vm());
     printf("\n");
   }
+  free_chunk(&chunk);
 }
 
 static char* read_file(const char* path) {

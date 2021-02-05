@@ -313,7 +313,8 @@ static i32 add_variable_to_global_symbols(Token* name, bool mutable) {
   }
   Value nil;
   value.type = mutable ? VAL_INTERNAL_COMPILER_MUTABLE : VAL_INTERNAL_COMPILER_IMMUTABLE;
-  nil.type = VAL_NIL;
+  nil.type = VAL_NUMBER;
+  nil.as.number = 0;
   value.as.number = make_constant(nil);
   table_set(&symbol_table, str, value);
   // Creates a global constant of the name of the token, also, it will be equal to the next
@@ -437,10 +438,10 @@ static inline void end_compiler() {
 #endif
 }
 
-static void print_statement() {
+static void user_level_statement(u8 op_code_to_emit) {
   expression();
   assert_current_and_advance(TOKEN_SEMICOLON, "Expected ';' after value.");
-  emit_byte(OP_PRINT);
+  emit_byte(op_code_to_emit);
 }
 
 static void grouping(bool _) {
@@ -673,11 +674,11 @@ static void for_statement() {
     i32 jump_condition = emit_jump(OP_JUMP);
     i32 start_increment = current_chunk()->count;
     expression();
-    assert_current_and_advance(TOKEN_RIGHT_PAREN, "Expected ')' after 'for'");
     emit_byte(OP_POP);
+    assert_current_and_advance(TOKEN_RIGHT_PAREN, "Expected ')' after 'for'");
     emit_loop(loop_start);
-    patch_jump(jump_condition);
     loop_start = start_increment;
+    patch_jump(jump_condition);
   }
 
   statement(false);
@@ -686,7 +687,7 @@ static void for_statement() {
 
   if (jump != -1) {
     patch_jump(jump);
-    // emit_byte(OP_POP);
+    emit_byte(OP_POP);
   }
 
   end_scope();
@@ -769,8 +770,6 @@ static void when_statement() {
   assert_current_and_advance(TOKEN_MINUS_ARROW, "Expected arrow");
   // parse the statement next to ->
   statement(false);
-  // Emit a pop (for the expression(); we parsed before)
-  // emit_byte(OP_POP);
   for (int j = 0; j < i; j++) {
     patch_jump(jumps[j]);
   }
@@ -780,7 +779,9 @@ static void when_statement() {
 
 static void statement(bool _) {
   if (match(TOKEN_PRINT)) {
-    print_statement();
+    user_level_statement(OP_PRINT);
+  } else if (match(TOKEN_ASSERT)) {
+    user_level_statement(OP_ASSERT);
   } else if (match(TOKEN_WHEN)) {
     when_statement();
   } else if (match(TOKEN_IF)) {

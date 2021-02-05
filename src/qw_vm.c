@@ -25,7 +25,7 @@ Value pop() {
   --vm.stack_top;
   return *(vm.stack_top);
 }
-
+//{ var x = 3; { var z = 2; z = 2; } var c = 3; c = 4; print c; }
 void init_vm() {
   reset_stack();
   vm.objects = NULL;
@@ -80,6 +80,7 @@ static inline void concatenate() {
 
 static InterpretResult run() {
   u8* initial = vm.ip;
+
 /// Returns the value of the current instrucction
 /// and advances instruction pointer to the next byte
 #define READ_BYTE() (*(vm.ip++))
@@ -102,7 +103,7 @@ static InterpretResult run() {
                                    &&do_op_equal,     &&do_op_greater,       &&do_op_less,          &&do_op_print,
                                    &&do_op_pop,       &&do_op_define_global, &&do_op_get_global,    &&do_op_set_global,
                                    &&do_op_get_local, &&do_op_set_local,     &&do_op_jump_if_false, &&do_op_jump,
-                                   &&do_op_jump_back, &&do_push_again};
+                                   &&do_op_jump_back, &&do_push_again,       &&do_op_assert};
 
 /// BinaryOp does a binary operation on the vm
 #define BINARY_OP(value_type, _op_)                                                                  \
@@ -162,6 +163,15 @@ static InterpretResult run() {
   do_op_print : {
     print_value(pop());
     printf("\n");
+    continue;
+  }
+
+  do_op_assert : {
+    Value value = pop();
+    if (!is_truthy(&value)) {
+      runtime_error("[assert failed] non truthy value on assert");
+      return INTERPRET_RUNTIME_ERROR;
+    }
     continue;
   }
 
@@ -391,10 +401,8 @@ InterpretResult interpret_source(const char* source) {
     free_chunk(&chunk);
     return INTERPRET_COMPILER_ERROR;
   }
-  vm.chunk = &chunk;
-  vm.ip = vm.chunk->code;
-  vm.objects = NULL;
-  InterpretResult result = run();
+  vm.stack_top = vm.stack;
+  InterpretResult result = interpret(&chunk);
   free_chunk(&chunk);
   return result;
 }

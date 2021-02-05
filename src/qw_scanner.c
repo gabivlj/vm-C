@@ -168,7 +168,14 @@ static TokenType identifier_type() {
       break;
     // Simple cases
     case 'a':
-      return check_keyword(1, 2, "nd", TOKEN_AND);
+      if (scanner.current - scanner.start <= 1) break;
+      switch (scanner.start[1]) {
+        case 's':
+          return check_keyword(2, 4, "sert", TOKEN_ASSERT);
+        case 'n':
+          return check_keyword(2, 1, "d", TOKEN_AND);
+      }
+      break;
     case 'c':
       return check_keyword(1, 4, "lass", TOKEN_CLASS);
     case 'e':

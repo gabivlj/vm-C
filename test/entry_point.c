@@ -194,6 +194,36 @@ TEST test_lines(void) {
   PASS();
 }
 
+TEST test_compilations() { /**/
+  const u32 number_of_scripts = 2;
+  const char* texts[] = {
+      "var result = 0;"
+      "for (var z = 0; z < 10; z = z + 1) {"
+      "for (var x = 0; x < 1000; x = x + 1) {"
+      // "print x;"
+      " when x {"
+      "  -1..500 -> { result = result + 1; }"
+      "  499..999 -> { result = result; }"
+      "  nothing -> { result = result - 1; }"
+      " }"
+      "}"
+      "}"
+      "print result;"
+      "assert result == 4990;",
+      "var result = 0;"
+      "for (var x = 0; x < 100; x = x + 1) {"
+      "when x { 0 -> result = result + 2; 0..3 -> result = result + 1; nothing -> result; }"
+      "}"
+      "assert result == 4;"};
+  for (int i = 0; i < number_of_scripts; i++) {
+    InterpretResult result = interpret_source(texts[i]);
+    ASSERT_EQ(result, INTERPRET_OK);
+  }
+  PASS();
+}
+
+SUITE(code_suite) { RUN_TEST(test_compilations); }
+
 SUITE(chunk_suite) {
   RUN_TEST(test_return_chunks);
   RUN_TEST(test_constants_chunks);
@@ -223,6 +253,8 @@ int main(int argc, char** argv) {
   RUN_SUITE(vm_suite);
 
   RUN_SUITE(scanner_suite);
+
+  RUN_SUITE(code_suite);
 
   GREATEST_MAIN_END(); /* display results */
 }
