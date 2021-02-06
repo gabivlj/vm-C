@@ -52,9 +52,9 @@ static void runtime_error(const char* format, ...) {
     CallFrame* frame = &vm.frames[i];
     ObjectFunction* fn = frame->function;
     isize ins = frame->ip - frame->function->chunk.code - 1;
-    fprintf(stderr, "[line %d] in", get_line_from_chunk(&fn->chunk, ins));
+    fprintf(stderr, "[line %d] in ", get_line_from_chunk(&fn->chunk, ins));
     if (fn->name == NULL) {
-      fprintf(stderr, "script\n");
+      fprintf(stderr, "<main>\n");
     } else {
       fprintf(stderr, "%s()\n", fn->name->chars);
     }
@@ -72,17 +72,20 @@ static bool call_value(Value function_stack_pointer_start, u8 arg_count) {
   }
   switch (obj->type) {
     case OBJECT_FUNCTION: {
-      CallFrame* frame = &vm.frames[vm.frame_count];
       ObjectFunction* fn = (ObjectFunction*)obj;
       if (fn->number_of_parameters != arg_count) {
         runtime_error("expected %d parameters, got: %d on `%s` call", fn->number_of_parameters, arg_count,
                       fn->name->chars);
         return false;
       }
+#ifdef DEBUG_TRACE_EXECUTION
+      printf("[FUNCTION_CALL] Called '%s'\n[FUNCTION_CALL] Adding new frame...\n",
+             fn->name == NULL ? "main" : fn->name->chars);
+#endif
+      CallFrame* frame = &vm.frames[vm.frame_count++];
       frame->ip = fn->chunk.code;
       frame->function = fn;
       frame->slots = vm.stack_top - arg_count - 1;
-      vm.frame_count++;
       return true;
       break;
     }
@@ -195,17 +198,22 @@ static InterpretResult run() {
 
   do_op_call : {
     u8 arg_count = READ_BYTE();
-    if (!call_value(PEEK_STACK(arg_count), arg_count))
-      //
-      return INTERPRET_RUNTIME_ERROR;
+    if (!call_value(PEEK_STACK(arg_count), arg_count)) return INTERPRET_RUNTIME_ERROR;
     if (run() == INTERPRET_RUNTIME_ERROR) return INTERPRET_RUNTIME_ERROR;
+    continue;
   }
 
   do_op_return : {
-    //     Value _ = pop();
-    // #ifdef DEBUG_TRACE_EXECUTION
-    //     print_value(_);
-    // #endif
+    Value result = pop();
+    vm.frame_count--;
+    if (vm.frame_count == 0) {
+      // Pop the frame
+      pop();
+      return INTERPRET_OK;
+    }
+    vm.stack_top = frame->slots;
+    push(result);
+    frame = &vm.frames[vm.frame_count - 1];
     return INTERPRET_OK;
   }
 

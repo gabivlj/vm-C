@@ -143,12 +143,13 @@ static void init_compiler(Compiler* compiler_parameter, FunctionType type) {
   compiler_parameter->function_type = type;
   compiler_parameter->function = new_function();
   // init_chunk(&compiler_parameter->function->chunk);
-  if (compiler_parameter->globals == NULL) {
+  if (current == NULL || current->globals == NULL) {
     compiler_parameter->globals = malloc(sizeof(ValueArray));
-    // compiler_parameter->globals = current->globals;
+    init_value_array(compiler_parameter->globals);
+  } else {
+    compiler_parameter->globals = current->globals;
   }
-  init_value_array(compiler_parameter->globals);
-
+  //
   compiler_parameter->enclosing_compiler = current;
   current = compiler_parameter;
 
@@ -181,7 +182,10 @@ static inline void emit_op_u32(u8 op, u32 value) {
   emit_u32((op << 24) | (value << 16) | (value & 0xFF)); /* ! TODO: INCOMPLETE*/
 }
 // static inline void emit_op_u32(u8 op, u32 value) { emit_u((op << 24) | value); }
-static inline void emit_return() { emit_byte(OP_RETURN); }
+static inline void emit_empty_return() {
+  emit_byte(OP_NIL);
+  emit_byte(OP_RETURN);
+}
 
 static u32 make_constant(Value val) {
   //
@@ -466,7 +470,7 @@ static void var_declaration(bool mutable) {
 }
 
 static inline ObjectFunction* end_compiler() {
-  emit_return();
+  emit_empty_return();
   ObjectFunction* function = current->function;
   function->global_array = current->globals;
 
@@ -873,7 +877,21 @@ static void fun_declaration() {
 }
 
 static void statement(bool _) {
-  if (match(TOKEN_PRINT)) {
+  if (match(TOKEN_RETURN)) {
+#ifdef DONT_ALLOW_RETURNS_IN_TOP_LEVEL
+    if (current->function_type == TYPE_SCRIPT) {
+      error_at_previous("Can't return at top level");
+      return;
+    }
+#endif
+    if (match(TOKEN_SEMICOLON)) {
+      emit_empty_return();
+    } else {
+      expression();
+      emit_byte(OP_RETURN);
+      assert_current_and_advance(TOKEN_SEMICOLON, "Expected ';' after return");
+    }
+  } else if (match(TOKEN_PRINT)) {
     user_level_statement(OP_PRINT);
   } else if (match(TOKEN_ASSERT)) {
     user_level_statement(OP_ASSERT);

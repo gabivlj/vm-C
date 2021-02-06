@@ -36,7 +36,6 @@ static u32 constant_instruction_long(const char* name, Chunk* chunk, u32 offset)
     printf("\n");
     return offset + 3;
   }
-  // fun a(c) { b(c); } fun b(c) { print c; } a("wwww");
 
   u16 constant = (chunk->code[offset + 1] << 8) | (chunk->code[offset + 2]);
   printf("%-16s %4d @", name, constant);
@@ -61,6 +60,9 @@ u32 dissasemble_instruction(Chunk* chunk, u32 offset) {
   }
   u8 instruction = chunk->code[offset];
   switch (instruction) {
+    case OP_NIL: {
+      return simple_instruction("OP_NIL", offset);
+    }
     case OP_PRINT: {
       return simple_instruction("OP_PRINT", offset);
     }
