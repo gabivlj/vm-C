@@ -30,6 +30,10 @@ static void free_object(Object* object) {
       FREE(ObjectFunction, fn);
       break;
     }
+    case OBJECT_NATIVE: {
+      FREE(OBJECT_NATIVE, object);
+      return;
+    }
     default: {
       fprintf(stderr, "[WARNING] Couldn't free object because it's of unkown type");
     }

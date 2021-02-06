@@ -195,7 +195,7 @@ TEST test_lines(void) {
 }
 
 TEST test_compilations() {
-  const u32 number_of_scripts = 2;
+  const u32 number_of_scripts = 3;
   const char* texts[] = {
       "var result = 0;"
       "for (var z = 0; z < 10; z = z + 1) {"
@@ -214,7 +214,8 @@ TEST test_compilations() {
       "for (var x = 0; x < 100; x = x + 1) {"
       "when x { 0 -> result = result + 2; 0..3 -> result = result + 1; nothing -> result; }"
       "}"
-      "assert result == 4;"};
+      "assert result == 4;",
+      "fun a(c) { return b(c) + 1; } fun b(c) { return c + 1; } assert a(1) == 3;"};
   for (int i = 0; i < number_of_scripts; i++) {
     InterpretResult result = interpret_source(texts[i]);
     ASSERT_EQ(result, INTERPRET_OK);

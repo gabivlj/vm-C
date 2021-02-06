@@ -64,6 +64,9 @@ void print_object(Value value) {
       print_function((ObjectFunction*)value.as.object);
       break;
     }
+    case OBJECT_NATIVE: {
+      printf("<native_function [%zu]>\n", (isize)((ObjectNative*)value.as.object)->function);
+    }
     default: {
       return;
     }
@@ -87,4 +90,10 @@ ObjectFunction* new_function() {
   function->number_of_parameters = 0;
   init_chunk(&function->chunk);
   return function;
+}
+
+ObjectNative* new_native_function(NativeFn callback) {
+  ObjectNative* native = ALLOCATE_OBJECT(ObjectNative, OBJECT_NATIVE);
+  native->function = callback;
+  return native;
 }

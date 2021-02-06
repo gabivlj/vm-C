@@ -11,6 +11,13 @@ struct Object {
   struct Object* next;
 };
 
+typedef Value (*NativeFn)(int arg_count, Value* args);
+
+typedef struct {
+  Object object;
+  NativeFn function;
+} ObjectNative;
+
 struct ObjectString {
   Object object;
   u64 hash;
@@ -45,6 +52,7 @@ ObjectString* allocate_string(u32 length, u32 hash);
 Object* allocate_object(ObjectType type, isize true_size);
 #define ALLOCATE_OBJECT(object_type, enum_type) (object_type*)allocate_object(enum_type, sizeof(object_type))
 ObjectFunction* new_function();
+ObjectNative* new_native_function(NativeFn callback);
 ObjectString* copy_string(u32 length, const char* start);
 u32 hash_string(char* str, u32 length);
 bool is_truthy(Value* obj);

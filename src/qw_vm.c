@@ -65,12 +65,25 @@ static void runtime_error(const char* format, ...) {
 }
 
 static bool call_value(Value function_stack_pointer_start, u8 arg_count) {
+  if (function_stack_pointer_start.type != VAL_OBJECT) {
+    runtime_error("can't call non function");
+    return false;
+  }
   Object* obj = function_stack_pointer_start.as.object;
   if (vm.frame_count == FRAMES_MAX) {
     runtime_error("Stackoverflow...");
     return false;
   }
+
   switch (obj->type) {
+    case OBJECT_NATIVE: {
+      ObjectNative* native = (ObjectNative*)obj;
+      NativeFn fn = native->function;
+      Value result = fn(arg_count, vm.stack_top - arg_count);
+      vm.stack_top -= (arg_count + 1);
+      push(result);
+      return true;
+    }
     case OBJECT_FUNCTION: {
       ObjectFunction* fn = (ObjectFunction*)obj;
       if (fn->number_of_parameters != arg_count) {
@@ -198,7 +211,10 @@ static InterpretResult run() {
 
   do_op_call : {
     u8 arg_count = READ_BYTE();
-    if (!call_value(PEEK_STACK(arg_count), arg_count)) return INTERPRET_RUNTIME_ERROR;
+
+    if (!call_value(PEEK_STACK(arg_count), arg_count)) {
+      return INTERPRET_RUNTIME_ERROR;
+    }
     if (run() == INTERPRET_RUNTIME_ERROR) return INTERPRET_RUNTIME_ERROR;
     continue;
   }

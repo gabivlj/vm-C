@@ -11,6 +11,7 @@
 #include "memory.h"
 #include "qw_common.h"
 #include "qw_debug.h"
+#include "qw_native_functions.h"
 #include "qw_object.h"
 #include "qw_scanner.h"
 #include "qw_table.h"
@@ -74,6 +75,7 @@ static void variable(bool);
 static void and_op(bool);
 static void call(bool);
 static void or_op(bool);
+static void add_native_function(const char* name, NativeFn function);
 static i32 add_variable_to_global_symbols(Token* name, bool mutable, bool can_assign);
 ParseRule rules[] = {
     [TOKEN_LEFT_PAREN] = {grouping, call, PREC_CALL},
@@ -136,6 +138,8 @@ Parser parser;
 
 Compiler* current = NULL;
 
+Table symbol_table;
+
 static void init_compiler(Compiler* compiler_parameter, FunctionType type) {
   compiler_parameter->function = NULL;
   compiler_parameter->local_count = 0;
@@ -161,10 +165,15 @@ static void init_compiler(Compiler* compiler_parameter, FunctionType type) {
   local->depth = 0;
   local->name.start = "";
   local->name.length = 0;
-}
+  if (compiler_parameter->enclosing_compiler == NULL) {
+    if (symbol_table.capacity != 0) {
+      free_table(&symbol_table);
+    }
 
-Chunk* chunk;
-Table symbol_table;
+    init_table(&symbol_table);
+    add_native_function("clock", clock_native);
+  }
+}
 
 static Chunk* current_chunk() { return &current->function->chunk; }
 // We use add_constant_opcode (internal logic inside chunk.h) because
@@ -356,6 +365,22 @@ static i32 add_variable_to_global_symbols(Token* name, bool mutable, bool can_as
   value.as.number = current->globals->count - 1;
   table_set(&symbol_table, str, value);
   return value.as.number;
+}
+
+static void add_native_function(const char* name, NativeFn function) {
+  ObjectString* name_str = copy_string(strlen(name), name);
+  ObjectNative* native_fn = new_native_function(function);
+  Value object_value = OBJECT_VAL(native_fn);
+  Value fill_value;
+  bool exists = table_get(&symbol_table, name_str, &fill_value);
+  if (exists) {
+    error_at_current("can't declare native function because name already exists");
+    return;
+  }
+  fill_value.type = VAL_INTERNAL_COMPILER_IMMUTABLE;
+  push_value(current->globals, object_value);
+  fill_value.as.number = current->globals->count - 1;
+  table_set(&symbol_table, name_str, fill_value);
 }
 
 static inline void mark_initialized() {
@@ -929,11 +954,12 @@ static void declaration(bool _) {
 
 ObjectFunction* compile(const char* source) {
   // if (symbol_table.capacity != 0) free_table(&symbol_table);
-  if (symbol_table.capacity == 0) init_table(&symbol_table);
+
   init_scanner(source);
   Compiler compiler;
   compiler.globals = (ValueArray*)malloc(sizeof(ValueArray));
   init_compiler(&compiler, TYPE_SCRIPT);
+
   parser.had_error = 0;
   parser.panic_mode = 0;
   advance();

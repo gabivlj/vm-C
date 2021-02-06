@@ -8,6 +8,7 @@ typedef struct Object Object;
 typedef enum {
   OBJECT_STRING,
   OBJECT_FUNCTION,
+  OBJECT_NATIVE,
 } ObjectType;
 
 typedef struct ObjectString ObjectString;
