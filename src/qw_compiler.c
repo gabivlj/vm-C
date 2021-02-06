@@ -72,10 +72,11 @@ static void statement(bool);
 static void declaration(bool);
 static void variable(bool);
 static void and_op(bool);
+static void call(bool);
 static void or_op(bool);
 static i32 add_variable_to_global_symbols(Token* name, bool mutable, bool can_assign);
 ParseRule rules[] = {
-    [TOKEN_LEFT_PAREN] = {grouping, NULL, PREC_NONE},
+    [TOKEN_LEFT_PAREN] = {grouping, call, PREC_CALL},
     [TOKEN_RIGHT_PAREN] = {NULL, NULL, PREC_NONE},
     [TOKEN_LEFT_BRACE] = {NULL, NULL, PREC_NONE},
     [TOKEN_RIGHT_BRACE] = {NULL, NULL, PREC_NONE},
@@ -141,6 +142,7 @@ static void init_compiler(Compiler* compiler_parameter, FunctionType type) {
   compiler_parameter->scope_depth = 0;
   compiler_parameter->function_type = type;
   compiler_parameter->function = new_function();
+  // init_chunk(&compiler_parameter->function->chunk);
   if (compiler_parameter->globals == NULL) {
     compiler_parameter->globals = malloc(sizeof(ValueArray));
     // compiler_parameter->globals = current->globals;
@@ -269,7 +271,7 @@ static void named_variable(Token name, bool can_assign) {
   u8 set_op;
   i32 arg = resolve_local(current, &name);
   if (arg == -1) {
-    arg = add_variable_to_global_symbols(&name, true, can_assign);
+    arg = add_variable_to_global_symbols(&name, !can_assign, can_assign);
     if (arg == -1) {
       error_at_current("cannot reassign (or redeclare) an immutable variable");
       return;
@@ -327,6 +329,8 @@ static void parse_precedence(Precedence precedence) {
 /// global symbol. If the passed name exists, and the mutability flag
 /// differs from the value mutability, it will return -1.
 ///
+/// TODO: Create various functions so we don't check local state.
+/// At the moment the user can "literally" do anything
 /// TODO: Maybe set an option that if the variable doesn't exist in the symbol table
 ///       return -1 as well?
 static i32 add_variable_to_global_symbols(Token* name, bool mutable, bool can_assign) {
@@ -334,12 +338,12 @@ static i32 add_variable_to_global_symbols(Token* name, bool mutable, bool can_as
   Value value;
   bool exists = table_get(&symbol_table, str, &value);
   if (exists) {
-    if (mutable && value.type == VAL_INTERNAL_COMPILER_IMMUTABLE && can_assign) return -1;
+    // if (mutable && value.type == VAL_INTERNAL_COMPILER_IMMUTABLE && can_assign) return -1;
     return (u16)value.as.number;
   }
-  if (!can_assign) {
-    return -1;
-  }
+  // if (!can_assign) {
+  //   return -1;
+  // }
   Value nil;
   value.type = mutable ? VAL_INTERNAL_COMPILER_MUTABLE : VAL_INTERNAL_COMPILER_IMMUTABLE;
   nil.type = VAL_NUMBER;
@@ -468,10 +472,10 @@ static inline ObjectFunction* end_compiler() {
 
 #ifdef DEBUG_PRINT_CODE
   if (!parser.had_error) {
-    dissasemble_chunk(current_chunk(), function->name != NULL ? function->name->chars : "<script>");
+    dissasemble_chunk(&function->chunk, function->name != NULL ? function->name->chars : "<script>");
   }
 #endif
-  current = current->enclosing_compiler;
+  if (current->enclosing_compiler != NULL) current = current->enclosing_compiler;
   return function;
 }
 
@@ -661,6 +665,27 @@ static void if_statement() {
 static void emit_loop(i32 start) {
   // + 3 because we have to jump over OP_JUMP_BACK and its 2 bytes (operands)
   emit_op_u16(OP_JUMP_BACK, current_chunk()->count - start + 3);
+}
+
+static u8 argument_list() {
+  u8 arg_count = 0;
+  if (!check(TOKEN_RIGHT_PAREN)) {
+    do {
+      expression();
+      arg_count++;
+    } while (match(TOKEN_COMMA));
+  }
+  if (arg_count == 255) {
+    error_at_previous("can't have more than 255 args...");
+  }
+  assert_current_and_advance(TOKEN_RIGHT_PAREN, "Expected ')' after arguments");
+  return arg_count;
+}
+
+static void call(bool can_assign) {
+  //
+  u8 arg_list = argument_list();
+  emit_op_u8(OP_CALL, arg_list);
 }
 
 static void while_statement() {

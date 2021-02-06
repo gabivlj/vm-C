@@ -47,7 +47,10 @@ ObjectString* copy_string(u32 length, const char* start) {
 }
 
 static void print_function(ObjectFunction* fn) {
-  if (fn->name == NULL) printf("<script>");
+  if (fn->name == NULL) {
+    printf("<script>");
+    return;
+  }
   printf("<function %s [%zu]>", fn->name->chars, (isize)fn);
 }
 

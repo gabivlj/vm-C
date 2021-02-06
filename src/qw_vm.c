@@ -8,7 +8,7 @@
 #include "qw_debug.h"
 #include "qw_object.h"
 
-#define DEBUG_TRACE_EXECUTION
+// #define DEBUG_TRACE_EXECUTION
 
 #define PEEK_STACK(distance) *(vm.stack_top - 1 - distance)
 
@@ -48,10 +48,49 @@ static void runtime_error(const char* format, ...) {
   vfprintf(stderr, format, args);
   va_end(args);
   fputs("\n", stderr);
-  CallFrame* frame = &vm.frames[vm.frame_count - 1];
-  isize ins = frame->ip - frame->function->chunk.code - 1;
-  u32 line = get_line_from_chunk(&frame->function->chunk, ins);
+  for (int i = vm.frame_count - 1; i >= 0; i--) {
+    CallFrame* frame = &vm.frames[i];
+    ObjectFunction* fn = frame->function;
+    isize ins = frame->ip - frame->function->chunk.code - 1;
+    fprintf(stderr, "[line %d] in", get_line_from_chunk(&fn->chunk, ins));
+    if (fn->name == NULL) {
+      fprintf(stderr, "script\n");
+    } else {
+      fprintf(stderr, "%s()\n", fn->name->chars);
+    }
+
+    u32 line = get_line_from_chunk(&frame->function->chunk, ins);
+  }
   reset_stack();
+}
+
+static bool call_value(Value function_stack_pointer_start, u8 arg_count) {
+  Object* obj = function_stack_pointer_start.as.object;
+  if (vm.frame_count == FRAMES_MAX) {
+    runtime_error("Stackoverflow...");
+    return false;
+  }
+  switch (obj->type) {
+    case OBJECT_FUNCTION: {
+      CallFrame* frame = &vm.frames[vm.frame_count];
+      ObjectFunction* fn = (ObjectFunction*)obj;
+      if (fn->number_of_parameters != arg_count) {
+        runtime_error("expected %d parameters, got: %d on `%s` call", fn->number_of_parameters, arg_count,
+                      fn->name->chars);
+        return false;
+      }
+      frame->ip = fn->chunk.code;
+      frame->function = fn;
+      frame->slots = vm.stack_top - arg_count - 1;
+      vm.frame_count++;
+      return true;
+      break;
+    }
+    default: {
+      runtime_error("can only call functions and classes");
+      return false;
+    }
+  }
 }
 
 static inline void concatenate() {
@@ -108,7 +147,7 @@ static InterpretResult run() {
                                    &&do_op_equal,     &&do_op_greater,       &&do_op_less,          &&do_op_print,
                                    &&do_op_pop,       &&do_op_define_global, &&do_op_get_global,    &&do_op_set_global,
                                    &&do_op_get_local, &&do_op_set_local,     &&do_op_jump_if_false, &&do_op_jump,
-                                   &&do_op_jump_back, &&do_push_again,       &&do_op_assert};
+                                   &&do_op_jump_back, &&do_push_again,       &&do_op_assert,        &&do_op_call};
 
 /// BinaryOp does a binary operation on the vm
 #define BINARY_OP(value_type, _op_)                                                                  \
@@ -153,6 +192,14 @@ static InterpretResult run() {
 
     // Goto current opcode handler
     DISPATCH();
+
+  do_op_call : {
+    u8 arg_count = READ_BYTE();
+    if (!call_value(PEEK_STACK(arg_count), arg_count))
+      //
+      return INTERPRET_RUNTIME_ERROR;
+    if (run() == INTERPRET_RUNTIME_ERROR) return INTERPRET_RUNTIME_ERROR;
+  }
 
   do_op_return : {
     //     Value _ = pop();
@@ -410,13 +457,10 @@ InterpretResult interpret_source(const char* source) {
     return INTERPRET_COMPILER_ERROR;
   }
   init_vm();
-  push(OBJECT_VAL(obj));
-  CallFrame* frame = &vm.frames[vm.frame_count++];
-  frame->function = obj;
-  frame->ip = obj->chunk.code;
-  frame->slots = vm.stack;
   vm.globals = *obj->global_array;
   vm.stack_top = vm.stack;
+  push(OBJECT_VAL(obj));
+  call_value(OBJECT_VAL(obj), 0);
   InterpretResult ok = run();
   return ok;
 }

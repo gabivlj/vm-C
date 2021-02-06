@@ -14,19 +14,37 @@ static u32 simple_instruction(const char* name, u32 offset) {
 }
 
 static u32 constant_instruction(const char* name, Chunk* chunk, u32 offset) {
+  // printf("bro if this doesn thit\n");
+  if (offset >= chunk->count || offset + 1 >= chunk->count) {
+    printf("%-16s %4d @ ??", name, offset);
+    printf("\n");
+    return offset + 2;
+  }
   u8 constant = chunk->code[offset + 1];
   printf("%-16s %4d @", name, constant);
-  // Access the constant and print it
-  print_value(chunk->constants.values[constant]);
+  if (chunk->constants.count <= constant) {
+    printf("?");
+  } else
+    print_value(chunk->constants.values[constant]);
   printf("\n");
   return offset + 2;
 }
 
 static u32 constant_instruction_long(const char* name, Chunk* chunk, u32 offset) {
+  if (offset + 1 >= chunk->count || offset >= chunk->count || offset + 2 >= chunk->count) {
+    printf("%s %4d @ ??", name, offset);
+    printf("\n");
+    return offset + 3;
+  }
+  // fun a(c) { b(c); } fun b(c) { print c; } a("wwww");
+
   u16 constant = (chunk->code[offset + 1] << 8) | (chunk->code[offset + 2]);
   printf("%-16s %4d @", name, constant);
   // Access the constant and print it
-  print_value(chunk->constants.values[constant]);
+  if (chunk->constants.count <= constant) {
+    printf("?");
+  } else
+    print_value(chunk->constants.values[constant]);
   printf("\n");
   return offset + 3;
 }
@@ -37,6 +55,9 @@ u32 dissasemble_instruction(Chunk* chunk, u32 offset) {
     printf("   |    | ");
   } else {
     printf("  %04d  | ", get_line_from_chunk(chunk, offset));
+  }
+  if (offset >= chunk->count) {
+    return offset + 1;
   }
   u8 instruction = chunk->code[offset];
   switch (instruction) {
@@ -108,6 +129,9 @@ u32 dissasemble_instruction(Chunk* chunk, u32 offset) {
     }
     case OP_JUMP: {
       return constant_instruction_long("OP_JUMP", chunk, offset);
+    }
+    case OP_CALL: {
+      return constant_instruction("OP_CALL", chunk, offset);
     }
     case OP_ASSERT: {
       return simple_instruction("OP_ASSERT", offset);

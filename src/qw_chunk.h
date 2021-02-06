@@ -41,7 +41,8 @@ typedef enum {
   OP_JUMP_BACK,
   // Pushes again the same element to the stack
   OP_PUSH_TOP,
-  OP_ASSERT
+  OP_ASSERT,
+  OP_CALL,
 } OpCode;
 
 /// Chunk is a sequence of bytecode
