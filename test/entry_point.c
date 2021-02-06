@@ -194,7 +194,7 @@ TEST test_lines(void) {
   PASS();
 }
 
-TEST test_compilations() { /**/
+TEST test_compilations() {
   const u32 number_of_scripts = 2;
   const char* texts[] = {
       "var result = 0;"
@@ -231,10 +231,10 @@ SUITE(chunk_suite) {
 }
 
 SUITE(vm_suite) {
-  RUN_TEST(test_vm_stack);
-  RUN_TEST(test_vm_ins_negate);
-  RUN_TEST(test_vm_ins_binary_ops);
-  RUN_TEST(test_large_op);
+  // RUN_TEST(test_vm_stack);
+  // RUN_TEST(test_vm_ins_negate);
+  // RUN_TEST(test_vm_ins_binary_ops);
+  // RUN_TEST(test_large_op);
 }
 
 SUITE(scanner_suite) {

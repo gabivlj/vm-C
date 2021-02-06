@@ -8,13 +8,16 @@
 #include "qw_debug.h"
 #include "qw_object.h"
 
-// #define DEBUG_TRACE_EXECUTION
+#define DEBUG_TRACE_EXECUTION
 
 #define PEEK_STACK(distance) *(vm.stack_top - 1 - distance)
 
 VM vm;
 
-static void reset_stack() { vm.stack_top = vm.stack; }
+static void reset_stack() {
+  vm.stack_top = vm.stack;
+  vm.frame_count = 0;
+}
 
 void push(Value value) {
   *vm.stack_top = value;
@@ -30,13 +33,13 @@ void init_vm() {
   reset_stack();
   vm.objects = NULL;
   init_table(&vm.strings);
-  init_table(&vm.globals);
+  // init_value_array(&vm.globals);
 }
 
 void free_vm() {
   free_objects();
   free_table(&vm.strings);
-  free_table(&vm.globals);
+  free_value_array(&vm.globals);
 }
 
 static void runtime_error(const char* format, ...) {
@@ -45,8 +48,9 @@ static void runtime_error(const char* format, ...) {
   vfprintf(stderr, format, args);
   va_end(args);
   fputs("\n", stderr);
-  isize ins = (vm.ip - vm.chunk->code) - 1;
-  u32 line = get_line_from_chunk(vm.chunk, ins);
+  CallFrame* frame = &vm.frames[vm.frame_count - 1];
+  isize ins = frame->ip - frame->function->chunk.code - 1;
+  u32 line = get_line_from_chunk(&frame->function->chunk, ins);
   reset_stack();
 }
 
@@ -79,21 +83,22 @@ static inline void concatenate() {
 }
 
 static InterpretResult run() {
-  u8* initial = vm.ip;
+  CallFrame* frame = &vm.frames[vm.frame_count - 1];
+  u8* initial = frame->ip;
 
 /// Returns the value of the current instrucction
 /// and advances instruction pointer to the next byte
-#define READ_BYTE() (*(vm.ip++))
+#define READ_BYTE() (*(frame->ip++))
 /// Dispatch gets the current IP (should be an instruction)
 /// and evaluates that instruction inside the dispatch table,
 /// making a goto to that memory location
 #define DISPATCH() goto* dispatch_table[READ_BYTE()]
 
 /// Reads the constant from the constant array
-#define READ_CONSTANT() (vm.chunk->constants.values[READ_BYTE()])
+#define READ_CONSTANT() (frame->function->chunk.constants.values[READ_BYTE()])
 
 /// Constant long is able to contain 2 byte constants
-#define READ_CONSTANT_LONG() (vm.chunk->constants.values[(READ_BYTE() << 8) | READ_BYTE()])
+#define READ_CONSTANT_LONG() (frame->function->chunk.constants.values[(READ_BYTE() << 8) | READ_BYTE()])
 
 #define READ_STRING() (AS_STRING(READ_CONSTANT_LONG()))
 
@@ -120,7 +125,8 @@ static InterpretResult run() {
 #ifdef DEBUG_TRACE_EXECUTION
   /// TODO: I don't wanna copy every version of debug_trace_execution :(
   // Prints the current instruction and it's operands
-  dissasemble_instruction(vm.chunk, (u32)(vm.ip - vm.chunk->code));
+  dissasemble_instruction(&frame->function->chunk, (u64)(frame->ip - frame->function->chunk.code));
+
   printf("    ** STACK **     ");
   for (Value* slot = vm.stack; slot < vm.stack_top; slot++) {
     printf("[ ");
@@ -129,12 +135,13 @@ static InterpretResult run() {
   }
   printf("\n");
 #endif
+
   // Goto current opcode handler
   DISPATCH();
   for (;;) {
 #ifdef DEBUG_TRACE_EXECUTION
     // Prints the current instruction and it's operands
-    dissasemble_instruction(vm.chunk, (u32)(vm.ip - vm.chunk->code));
+    dissasemble_instruction(&frame->function->chunk, (u32)(frame->ip - frame->function->chunk.code));
     printf("    ** STACK **     ");
     for (Value* slot = vm.stack; slot < vm.stack_top; slot++) {
       printf("[ ");
@@ -297,8 +304,8 @@ static InterpretResult run() {
     print_value(PEEK_STACK(0));
     printf("\n");
 #endif
-    // push_value(vm.chunk->constants)
-    vm.chunk->constants.values[index] = pop();
+    // push_value(frame->function->chunk.constants)
+    vm.frames[0].function->global_array->values[index] = pop();
     // table_set(&vm.globals, name, PEEK_STACK(0));
     continue;
   }
@@ -313,35 +320,36 @@ static InterpretResult run() {
     // } else
     //   printf("[GET_GLOBAL] VALUE NOT FOUND");
 #endif
-    if (index >= vm.chunk->constants.count) {
+    if (index >= vm.frames[0].function->global_array->count) {
       runtime_error("undefined variable %d", index);
       return INTERPRET_RUNTIME_ERROR;
     }
-    push(vm.chunk->constants.values[index]);
+    push(vm.frames[0].function->global_array->values[index]);
     continue;
   }
 
   do_op_set_global : {
     // ...
     u16 index = (READ_BYTE() << 8) | READ_BYTE();
-    if (index >= vm.chunk->constants.count) {
+    if (index >= frame->function->chunk.constants.count) {
       runtime_error("undefined variable");
       return INTERPRET_RUNTIME_ERROR;
     }
-    vm.chunk->constants.values[index] = PEEK_STACK(0);  // << holy fuck, be careful, this SHOULD be popped by the
-                                                        // variable declaration or expression_stmt Not by this operation
+    vm.frames[0].function->global_array->values[index] =
+        PEEK_STACK(0);  // << holy fuck, be careful, this SHOULD be popped by the
+                        // variable declaration or expression_stmt Not by this operation
     continue;
   }
 
   do_op_get_local : {
     //
     u16 slot = (READ_BYTE() << 8) | READ_BYTE();
-    push(vm.stack[slot]);
+    push(frame->slots[slot]);
     continue;
   }
   do_op_set_local : {
     u16 slot = (READ_BYTE() << 8) | READ_BYTE();
-    vm.stack[slot] = PEEK_STACK(0);
+    frame->slots[slot] = PEEK_STACK(0);
     continue;
   }
 
@@ -351,9 +359,10 @@ static InterpretResult run() {
 #endif
     Value value = PEEK_STACK(0);
     u16 offset = ((READ_BYTE() << 8) | READ_BYTE());
-    vm.ip += offset * !is_truthy(&value);
+    frame->ip += offset * !is_truthy(&value);
     // #if DEBUG_TRACE_EXECUTION
-    //     printf("[OP_JUMP_IF_FALSE] Jumping %d -> %d by %d\n", (vm.ip - initial) - offset - 3, (vm.ip - initial),
+    //     printf("[OP_JUMP_IF_FALSE] Jumping %d -> %d by %d\n", (frame->ip - initial) - offset - 3, (frame->ip -
+    //     initial),
     //            offset + 3);
     // #endif
     continue;
@@ -361,16 +370,17 @@ static InterpretResult run() {
 
   do_op_jump : {
     u16 offset = ((READ_BYTE() << 8) | READ_BYTE());
-    vm.ip += offset;
+    frame->ip += offset;
     // #if DEBUG_TRACE_EXECUTION
-    //     printf("[OP_JUMP] Jumping %d -> %d by %d\n", (vm.ip - initial) - offset - 3, (vm.ip - initial), offset + 3);
+    //     printf("[OP_JUMP] Jumping %d -> %d by %d\n", (frame->ip - initial) - offset - 3, (frame->ip - initial),
+    //     offset + 3);
     //#endif
     continue;
   }
     // var x = 2; when x { 4 | 3 | 1-> print "really good"; 3 | 10 | 32 ->print "cool"; nothing -> print "bad"; }
   do_op_jump_back : {
     u16 offset = ((READ_BYTE() << 8) | READ_BYTE());
-    vm.ip -= offset;
+    frame->ip -= offset;
     continue;
   }
   do_push_again : {
@@ -395,14 +405,18 @@ InterpretResult interpret(Chunk* chunk) {
 Value* stack_vm() { return vm.stack; }
 
 InterpretResult interpret_source(const char* source) {
-  Chunk chunk;
-  init_chunk(&chunk);
-  if (!compile(source, &chunk)) {
-    free_chunk(&chunk);
+  ObjectFunction* obj;
+  if (!(obj = compile(source))) {
     return INTERPRET_COMPILER_ERROR;
   }
+  init_vm();
+  push(OBJECT_VAL(obj));
+  CallFrame* frame = &vm.frames[vm.frame_count++];
+  frame->function = obj;
+  frame->ip = obj->chunk.code;
+  frame->slots = vm.stack;
+  vm.globals = *obj->global_array;
   vm.stack_top = vm.stack;
-  InterpretResult result = interpret(&chunk);
-  free_chunk(&chunk);
-  return result;
+  InterpretResult ok = run();
+  return ok;
 }

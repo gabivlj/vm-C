@@ -45,7 +45,17 @@ typedef struct {
   bool mutable;
 } Local;
 
-typedef struct {
+typedef enum {
+  TYPE_FUNCTION,
+  TYPE_SCRIPT,
+} FunctionType;
+
+typedef struct Compiler {
+  // The compiler which was called brom
+  struct Compiler* enclosing_compiler;
+  ObjectFunction* function;
+  FunctionType function_type;
+  ValueArray* globals;
   Local locals[UINT16_COUNT];
   i32 local_count;
   i32 scope_depth;
@@ -63,7 +73,7 @@ static void declaration(bool);
 static void variable(bool);
 static void and_op(bool);
 static void or_op(bool);
-static i32 add_variable_to_global_symbols(Token* name, bool mutable);
+static i32 add_variable_to_global_symbols(Token* name, bool mutable, bool can_assign);
 ParseRule rules[] = {
     [TOKEN_LEFT_PAREN] = {grouping, NULL, PREC_NONE},
     [TOKEN_RIGHT_PAREN] = {NULL, NULL, PREC_NONE},
@@ -125,20 +135,38 @@ Parser parser;
 
 Compiler* current = NULL;
 
-static void init_compiler(Compiler* compiler_parameter) {
+static void init_compiler(Compiler* compiler_parameter, FunctionType type) {
+  compiler_parameter->function = NULL;
   compiler_parameter->local_count = 0;
   compiler_parameter->scope_depth = 0;
+  compiler_parameter->function_type = type;
+  compiler_parameter->function = new_function();
+  if (compiler_parameter->globals == NULL) {
+    compiler_parameter->globals = malloc(sizeof(ValueArray));
+    // compiler_parameter->globals = current->globals;
+  }
+  init_value_array(compiler_parameter->globals);
+
+  compiler_parameter->enclosing_compiler = current;
   current = compiler_parameter;
+
+  if (type != TYPE_SCRIPT) {
+    current->function->name = copy_string(parser.previous.length, parser.previous.start);
+  }
+
+  Local* local = &current->locals[current->local_count++];
+  local->depth = 0;
+  local->name.start = "";
+  local->name.length = 0;
 }
 
 Chunk* chunk;
 Table symbol_table;
 
+static Chunk* current_chunk() { return &current->function->chunk; }
 // We use add_constant_opcode (internal logic inside chunk.h) because
 // it handles as well which kind of OP_CONSTANT to use
-static u32 emit_constant(Value value) { return add_constant_opcode(chunk, value, parser.previous.line); }
-
-static Chunk* current_chunk() { return chunk; }
+static u32 emit_constant(Value value) { return add_constant_opcode(current_chunk(), value, parser.previous.line); }
 
 static inline void emit_byte(u8 byte) { write_chunk(current_chunk(), byte, parser.previous.line); }
 static inline void emit_u16(u16 value) { write_chunk_u16(current_chunk(), value, parser.previous.line); }
@@ -241,7 +269,7 @@ static void named_variable(Token name, bool can_assign) {
   u8 set_op;
   i32 arg = resolve_local(current, &name);
   if (arg == -1) {
-    arg = add_variable_to_global_symbols(&name, true);
+    arg = add_variable_to_global_symbols(&name, true, can_assign);
     if (arg == -1) {
       error_at_current("cannot reassign (or redeclare) an immutable variable");
       return;
@@ -301,26 +329,30 @@ static void parse_precedence(Precedence precedence) {
 ///
 /// TODO: Maybe set an option that if the variable doesn't exist in the symbol table
 ///       return -1 as well?
-static i32 add_variable_to_global_symbols(Token* name, bool mutable) {
+static i32 add_variable_to_global_symbols(Token* name, bool mutable, bool can_assign) {
   ObjectString* str = copy_string(name->length, name->start);
   Value value;
   bool exists = table_get(&symbol_table, str, &value);
   if (exists) {
-    if (mutable && value.type == VAL_INTERNAL_COMPILER_IMMUTABLE ||
-        (!mutable && value.type == VAL_INTERNAL_COMPILER_MUTABLE))
-      return -1;
+    if (mutable && value.type == VAL_INTERNAL_COMPILER_IMMUTABLE && can_assign) return -1;
     return (u16)value.as.number;
+  }
+  if (!can_assign) {
+    return -1;
   }
   Value nil;
   value.type = mutable ? VAL_INTERNAL_COMPILER_MUTABLE : VAL_INTERNAL_COMPILER_IMMUTABLE;
   nil.type = VAL_NUMBER;
   nil.as.number = 0;
-  value.as.number = make_constant(nil);
+  push_value(current->globals, nil);
+  value.as.number = current->globals->count - 1;
   table_set(&symbol_table, str, value);
-  // Creates a global constant of the name of the token, also, it will be equal to the next
-  // thing in the stack. Returns the index in which the string of the variable name is stored
-  // make_constant();
   return value.as.number;
+}
+
+static inline void mark_initialized() {
+  if (current->scope_depth == 0) return;
+  current->locals[current->local_count - 1].depth = current->scope_depth;
 }
 
 /// Defines a new variable, either local or global
@@ -328,7 +360,7 @@ static inline void define_variable(u16 global) {
   // No need to create a reference to the global position
   // we already got it in the stack...
   if (current->scope_depth > 0) {
-    current->locals[current->local_count - 1].depth = current->scope_depth;
+    mark_initialized();
     return;
   }
   emit_op_u16(OP_DEFINE_GLOBAL, global);
@@ -403,7 +435,7 @@ static i32 parse_variable(const char* error_message, bool mutable) {
   try_declare_local_variable(mutable);
   // we check the scope_depth the lookup of local variables are different than global
   if (current->scope_depth > 0) return 0;
-  return add_variable_to_global_symbols(&parser.previous, mutable);
+  return add_variable_to_global_symbols(&parser.previous, mutable, true);
 }
 
 /// parses ('var' | 'let') IDENT '=' <expression>;
@@ -429,13 +461,18 @@ static void var_declaration(bool mutable) {
   define_variable((u16)global);
 }
 
-static inline void end_compiler() {
+static inline ObjectFunction* end_compiler() {
   emit_return();
+  ObjectFunction* function = current->function;
+  function->global_array = current->globals;
+
 #ifdef DEBUG_PRINT_CODE
   if (!parser.had_error) {
-    dissasemble_chunk(current_chunk(), "code");
+    dissasemble_chunk(current_chunk(), function->name != NULL ? function->name->chars : "<script>");
   }
 #endif
+  current = current->enclosing_compiler;
+  return function;
 }
 
 static void user_level_statement(u8 op_code_to_emit) {
@@ -623,7 +660,7 @@ static void if_statement() {
 
 static void emit_loop(i32 start) {
   // + 3 because we have to jump over OP_JUMP_BACK and its 2 bytes (operands)
-  emit_op_u16(OP_JUMP_BACK, chunk->count - start + 3);
+  emit_op_u16(OP_JUMP_BACK, current_chunk()->count - start + 3);
 }
 
 static void while_statement() {
@@ -777,11 +814,46 @@ static void when_statement() {
   assert_current_and_advance(TOKEN_RIGHT_BRACE, "Expected brace TODO ERROR");
 }
 
+static void parse_function(FunctionType type) {
+  // Initialize a new compiler for this function
+  Compiler compiler;
+  init_compiler(&compiler, type);
+  begin_scope();
+  assert_current_and_advance(TOKEN_LEFT_PAREN, "Expected '(' after a function name");
+  if (!check(TOKEN_RIGHT_PAREN)) {
+    do {
+      current->function->number_of_parameters++;
+      if (current->function->number_of_parameters > 255) {
+        error_at_current("can't have more than 255 parameters");
+      }
+      u16 param_constant = parse_variable("Expect parameter name.", true);
+      define_variable(param_constant);
+    } while (match(TOKEN_COMMA));
+  }
+  assert_current_and_advance(TOKEN_RIGHT_PAREN, "Expected ')' after a function name");
+
+  assert_current_and_advance(TOKEN_LEFT_BRACE, "Expected '{' before fn body");
+  block();
+
+  ObjectFunction* function = end_compiler();
+  current = compiler.enclosing_compiler;
+  emit_constant(OBJECT_VAL(function));
+}
+
+static void fun_declaration() {
+  u16 global = parse_variable("Expected function name.", false);
+  mark_initialized();
+  parse_function(TYPE_FUNCTION);
+  define_variable(global);
+}
+
 static void statement(bool _) {
   if (match(TOKEN_PRINT)) {
     user_level_statement(OP_PRINT);
   } else if (match(TOKEN_ASSERT)) {
     user_level_statement(OP_ASSERT);
+  } else if (match(TOKEN_FUN)) {
+    fun_declaration();
   } else if (match(TOKEN_WHEN)) {
     when_statement();
   } else if (match(TOKEN_IF)) {
@@ -812,13 +884,13 @@ static void declaration(bool _) {
   }
 }
 
-u8 compile(const char* source, Chunk* chunk_to_add_on) {
+ObjectFunction* compile(const char* source) {
   // if (symbol_table.capacity != 0) free_table(&symbol_table);
   if (symbol_table.capacity == 0) init_table(&symbol_table);
   init_scanner(source);
   Compiler compiler;
-  init_compiler(&compiler);
-  chunk = chunk_to_add_on;
+  compiler.globals = (ValueArray*)malloc(sizeof(ValueArray));
+  init_compiler(&compiler, TYPE_SCRIPT);
   parser.had_error = 0;
   parser.panic_mode = 0;
   advance();
@@ -827,6 +899,6 @@ u8 compile(const char* source, Chunk* chunk_to_add_on) {
   }
   // expression();
   assert_current_and_advance(TOKEN_EOF, "Expected end of expression");
-  end_compiler();
-  return !parser.had_error;
+  ObjectFunction* fn = end_compiler();
+  return parser.had_error ? NULL : fn;
 }

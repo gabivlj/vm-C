@@ -18,13 +18,15 @@ struct ObjectString {
   char chars[];
 };
 
-struct ObjectFunction {
+typedef struct {
   Object object;
   u32 number_of_parameters;
   // Compiled bytecode
   Chunk chunk;
   ObjectString* name;
-};
+
+  ValueArray* global_array;
+} ObjectFunction;
 
 #define OBJECT_TYPE(value) (AS_OBJECT(value)->type)
 
@@ -42,7 +44,7 @@ void print_object(Value value);
 ObjectString* allocate_string(u32 length, u32 hash);
 Object* allocate_object(ObjectType type, isize true_size);
 #define ALLOCATE_OBJECT(object_type, enum_type) (object_type*)allocate_object(enum_type, sizeof(object_type))
-
+ObjectFunction* new_function();
 ObjectString* copy_string(u32 length, const char* start);
 u32 hash_string(char* str, u32 length);
 bool is_truthy(Value* obj);

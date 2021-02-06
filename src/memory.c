@@ -23,6 +23,13 @@ static void free_object(Object* object) {
       FREE(ObjectString, string);
       break;
     }
+    case OBJECT_FUNCTION: {
+      ObjectFunction* fn = (ObjectFunction*)object;
+      free_chunk(&fn->chunk);
+      // FREE(ObjectString, fn->name);
+      FREE(ObjectFunction, fn);
+      break;
+    }
     default: {
       fprintf(stderr, "[WARNING] Couldn't free object because it's of unkown type");
     }

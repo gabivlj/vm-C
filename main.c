@@ -24,16 +24,7 @@ static void repl() {
       printf("\n");
       break;
     }
-    ValueArray arr = chunk.constants;
-    init_chunk(&chunk);
-    chunk.constants = arr;
-    if (!compile(line, &chunk)) {
-      continue;
-    }
-    if (!interpret(&chunk)) {
-      continue;
-    }
-    print_value(*stack_vm());
+    interpret_source(line);
     printf("\n");
   }
   free_chunk(&chunk);

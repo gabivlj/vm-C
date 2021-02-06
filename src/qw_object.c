@@ -46,10 +46,19 @@ ObjectString* copy_string(u32 length, const char* start) {
   return string;
 }
 
+static void print_function(ObjectFunction* fn) {
+  if (fn->name == NULL) printf("<script>");
+  printf("<function %s [%zu]>", fn->name->chars, (isize)fn);
+}
+
 void print_object(Value value) {
   switch (OBJECT_TYPE(value)) {
     case OBJECT_STRING: {
       printf("`%s`", AS_CSTRING(value));
+      break;
+    }
+    case OBJECT_FUNCTION: {
+      print_function((ObjectFunction*)value.as.object);
       break;
     }
     default: {
@@ -67,4 +76,12 @@ bool is_truthy(Value* obj) {
   // TODO check string
   if (obj->type == VAL_OBJECT) return true;
   return false;
+}
+
+ObjectFunction* new_function() {
+  ObjectFunction* function = ALLOCATE_OBJECT(ObjectFunction, OBJECT_FUNCTION);
+  function->name = NULL;
+  function->number_of_parameters = 0;
+  init_chunk(&function->chunk);
+  return function;
 }

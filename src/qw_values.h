@@ -5,7 +5,10 @@
 
 typedef struct Object Object;
 
-typedef enum { OBJECT_STRING } ObjectType;
+typedef enum {
+  OBJECT_STRING,
+  OBJECT_FUNCTION,
+} ObjectType;
 
 typedef struct ObjectString ObjectString;
 
