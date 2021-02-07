@@ -1,6 +1,7 @@
 #include "qw_vm.h"
 
 #include <stdarg.h>
+#include <stdlib.h>
 
 #include "memory.h"
 #include "qw_common.h"
@@ -33,13 +34,11 @@ void init_vm() {
   reset_stack();
   vm.objects = NULL;
   init_table(&vm.strings);
-  // init_value_array(&vm.globals);
 }
 
 void free_vm() {
   free_objects();
   free_table(&vm.strings);
-  free_value_array(&vm.globals);
 }
 
 static void runtime_error(const char* format, ...) {
@@ -139,6 +138,7 @@ static inline void concatenate() {
 
 static InterpretResult run() {
   CallFrame* frame = &vm.frames[vm.frame_count - 1];
+  u8* ip = frame->ip;
   u8* initial = frame->ip;
 
 /// Returns the value of the current instrucction
@@ -211,7 +211,6 @@ static InterpretResult run() {
 
   do_op_call : {
     u8 arg_count = READ_BYTE();
-
     if (!call_value(PEEK_STACK(arg_count), arg_count)) {
       return INTERPRET_RUNTIME_ERROR;
     }
@@ -258,6 +257,7 @@ static InterpretResult run() {
     push(constant);
     continue;
   }
+
   do_op_constant_long : {
     Value constant = READ_CONSTANT_LONG();
     push(constant);
@@ -303,14 +303,17 @@ static InterpretResult run() {
     BINARY_OP(NUMBER_VAL, /);
     continue;
   }
+
   do_op_true : {
     push(BOOL_VAL(true));
     continue;
   }
+
   do_op_false : {
     push(BOOL_VAL(false));
     continue;
   }
+
   do_op_nil : {
     push(NIL_VAL);
     continue;
@@ -486,5 +489,8 @@ InterpretResult interpret_source(const char* source) {
   push(OBJECT_VAL(obj));
   call_value(OBJECT_VAL(obj), 0);
   InterpretResult ok = run();
+  free_vm();
+  free_value_array(obj->global_array);
+  free(obj->global_array);
   return ok;
 }

@@ -1,0 +1,12 @@
+var result = 0;
+for (var z = 0; z < 10; z = z + 1) {
+  for (var x = 0; x < 1000; x = x + 1) {  
+    when x {
+    -1..500 -> { result = result + 1; }
+    499..999 -> { result = result; }
+    nothing -> { result = result - 1; }
+    }
+  }
+}
+
+assert result == 4990;

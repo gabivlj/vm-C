@@ -146,7 +146,7 @@ static void init_compiler(Compiler* compiler_parameter, FunctionType type) {
   compiler_parameter->scope_depth = 0;
   compiler_parameter->function_type = type;
   compiler_parameter->function = new_function();
-  // init_chunk(&compiler_parameter->function->chunk);
+
   if (current == NULL || current->globals == NULL) {
     compiler_parameter->globals = malloc(sizeof(ValueArray));
     init_value_array(compiler_parameter->globals);
@@ -498,13 +498,16 @@ static inline ObjectFunction* end_compiler() {
   emit_empty_return();
   ObjectFunction* function = current->function;
   function->global_array = current->globals;
-
 #ifdef DEBUG_PRINT_CODE
   if (!parser.had_error) {
     dissasemble_chunk(&function->chunk, function->name != NULL ? function->name->chars : "<script>");
   }
 #endif
-  if (current->enclosing_compiler != NULL) current = current->enclosing_compiler;
+  if (current->enclosing_compiler != NULL)
+    current = current->enclosing_compiler;
+  else {
+    current->globals = NULL;
+  }
   return function;
 }
 
@@ -958,6 +961,7 @@ ObjectFunction* compile(const char* source) {
   init_scanner(source);
   Compiler compiler;
   compiler.globals = (ValueArray*)malloc(sizeof(ValueArray));
+  init_value_array(compiler.globals);
   init_compiler(&compiler, TYPE_SCRIPT);
 
   parser.had_error = 0;

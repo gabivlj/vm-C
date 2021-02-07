@@ -3,6 +3,22 @@
 #include "../src/qw_vm.h"
 #include "greatest.h"
 
+static char* read_file(const char* path) {
+  FILE* file = fopen(path, "rb");
+  // ASSERT_FALSE(file == NULL);
+  fseek(file, 0L, SEEK_END);
+  isize file_size = ftell(file);
+  rewind(file);
+  // + 1 because \0 ended
+  char* buffer = (char*)malloc(file_size + 1);
+  // ASSERT_FALSE(buffer == NULL);
+  isize bytes_read = fread(buffer, sizeof(char), file_size, file);
+  // ASSERT_FALSE(bytes_read != file_size);
+  buffer[bytes_read] = '\0';
+  fclose(file);
+  return buffer;
+}
+
 TEST test_scanner_tokens() {
   const char* line =
       "/ />= ==!= == =!=123\"nice\"1.234cool_thing_123 if(True) { return 1; } else while print var nil super class "
@@ -194,6 +210,21 @@ TEST test_lines(void) {
   PASS();
 }
 
+TEST test_file_compilations() {
+  const u32 number_of_scripts = 2;
+  const char* scripts[] = {
+      "./scripts/fib.qw.test",
+      "./scripts/when.qw.test",
+  };
+  for (u16 i = 0; i < number_of_scripts; ++i) {
+    char* f = read_file(scripts[i]);
+    InterpretResult result = interpret_source(f);
+    ASSERT_EQ(result, INTERPRET_OK);
+    free(f);
+  }
+  PASS();
+}
+
 TEST test_compilations() {
   const u32 number_of_scripts = 3;
   const char* texts[] = {
@@ -223,7 +254,10 @@ TEST test_compilations() {
   PASS();
 }
 
-SUITE(code_suite) { RUN_TEST(test_compilations); }
+SUITE(code_suite) {
+  // RUN_TEST(test_compilations);
+  RUN_TEST(test_file_compilations);
+}
 
 SUITE(chunk_suite) {
   RUN_TEST(test_return_chunks);

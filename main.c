@@ -9,7 +9,7 @@
 #include "./src/qw_vm.h"
 
 #define EXIT_IF_ERR(expr, msg, code) \
-  if (!(expr)) {                     \
+  if ((expr)) {                      \
     fprintf(stderr, msg);            \
     exit(code);                      \
   }
@@ -32,13 +32,13 @@ static void repl() {
 
 static char* read_file(const char* path) {
   FILE* file = fopen(path, "rb");
-  EXIT_IF_ERR(file != NULL, "couldn't find passed file", 74);
+  EXIT_IF_ERR(file == NULL, "couldn't find passed file\n", 74);
   fseek(file, 0L, SEEK_END);
   isize file_size = ftell(file);
   rewind(file);
   // + 1 because \0 ended
   char* buffer = (char*)malloc(file_size + 1);
-  EXIT_IF_ERR(buffer != NULL, "file is too big", 74);
+  EXIT_IF_ERR(buffer == NULL, "file is too big", 74);
   isize bytes_read = fread(buffer, sizeof(char), file_size, file);
   EXIT_IF_ERR(bytes_read < file_size, "couldn't read all file", 74);
   buffer[bytes_read] = '\0';
@@ -58,14 +58,6 @@ static void run_file(const char* path) {
 }
 
 int main(int argc, const char* argv[]) {
-  init_vm();
-  if (argc == 1) {
-    repl();
-  } else if (argc == 2) {
-    run_file(argv[0]);
-  } else {
-    fprintf(stderr, "Usage: qw [path]\n");
-    exit(64);
-  }
-  free_vm();
+  run_file("./examples/fib.qw");
+  run_file("./examples/fib.qw");
 }

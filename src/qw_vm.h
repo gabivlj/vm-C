@@ -21,9 +21,9 @@ typedef struct {
 #define STACK_MAX (FRAMES_MAX * 256)
 
 typedef struct {
-  CallFrame frames[STACK_MAX];
+  CallFrame frames[FRAMES_MAX];
 
-  u32 frame_count;
+  i32 frame_count;
 
   /// Stack of values
   Value stack[STACK_MAX];
