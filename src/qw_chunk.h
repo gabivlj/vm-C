@@ -43,6 +43,9 @@ typedef enum {
   OP_PUSH_TOP,
   OP_ASSERT,
   OP_CALL,
+  OP_CLOSURE,
+  OP_GET_UPVALUE,
+  OP_SET_UPVALUE
 } OpCode;
 
 /// Chunk is a sequence of bytecode

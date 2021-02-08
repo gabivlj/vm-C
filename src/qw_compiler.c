@@ -46,6 +46,11 @@ typedef struct {
   bool mutable;
 } Local;
 
+typedef struct {
+  u8 index;
+  bool is_local;
+} Upvalue;
+
 typedef enum {
   TYPE_FUNCTION,
   TYPE_SCRIPT,
@@ -60,6 +65,7 @@ typedef struct Compiler {
   Local locals[UINT16_COUNT];
   i32 local_count;
   i32 scope_depth;
+  Upvalue upvalues[UINT8_MAX];
 } Compiler;
 
 static void binary(bool);
@@ -169,7 +175,6 @@ static void init_compiler(Compiler* compiler_parameter, FunctionType type) {
     if (symbol_table.capacity != 0) {
       free_table(&symbol_table);
     }
-
     init_table(&symbol_table);
     add_native_function("clock", clock_native);
   }
@@ -278,22 +283,66 @@ static i32 resolve_local(Compiler* compiler, Token* name) {
   return -1;
 }
 
+i32 add_upvalue(Compiler* compiler, i32 upvalue_index, bool is_local) {
+  u32 upvalue_count = compiler->function->upvalue_count;
+  for (i32 i = 0; i < upvalue_count; i++) {
+    Upvalue* upvalue = &compiler->upvalues[i];
+    if (upvalue->index == i && upvalue->is_local == is_local) {
+      return i;
+    }
+  }
+  compiler->upvalues[upvalue_count].is_local = is_local;
+
+  compiler->upvalues[upvalue_count].index = upvalue_index;
+  return compiler->function->upvalue_count++;
+}
+
+/// Returns the upvalue index (if it finds one)
+static i32 resolve_upvalue(Compiler* compiler, Token* name) {
+  if (compiler->enclosing_compiler == NULL) {
+    return -1;
+  }
+
+  // Resolve it if it's just above
+  i32 local = resolve_local(compiler->enclosing_compiler, name);
+
+  // It means that it's just above this function
+  if (local != -1) {
+    return add_upvalue(compiler, local, true);
+  }
+
+  // check end of file explaining diagram
+  i32 upvalue = resolve_upvalue(compiler->enclosing_compiler, name);
+
+  // This means that it's 2 levels above, minimum
+  if (upvalue != -1) {
+    return add_upvalue(compiler, upvalue, false);
+  }
+  return -1;
+}
+
 /// This is a function that parses a identifier ['=' <expression>]
 static void named_variable(Token name, bool can_assign) {
   u8 get_op;
   u8 set_op;
   i32 arg = resolve_local(current, &name);
-  if (arg == -1) {
-    arg = add_variable_to_global_symbols(&name, !can_assign, can_assign);
-    if (arg == -1) {
-      error_at_current("cannot reassign (or redeclare) an immutable variable");
-      return;
-    }
-    get_op = OP_GET_GLOBAL;
-    set_op = OP_SET_GLOBAL;
-  } else {
+  if (arg != -1) {
     get_op = OP_GET_LOCAL;
     set_op = OP_SET_LOCAL;
+  } else {
+    arg = resolve_upvalue(current, &name);
+    if (arg != -1) {
+      get_op = OP_GET_UPVALUE;
+      set_op = OP_SET_UPVALUE;
+    } else {
+      arg = add_variable_to_global_symbols(&name, !can_assign, can_assign);
+      if (arg == -1) {
+        error_at_current("cannot reassign (or redeclare) an immutable variable");
+        return;
+      }
+      get_op = OP_GET_GLOBAL;
+      set_op = OP_SET_GLOBAL;
+    }
   }
   // This is an assignment
   if (can_assign && match(TOKEN_EQUAL)) {
@@ -503,11 +552,8 @@ static inline ObjectFunction* end_compiler() {
     dissasemble_chunk(&function->chunk, function->name != NULL ? function->name->chars : "<script>");
   }
 #endif
-  if (current->enclosing_compiler != NULL)
-    current = current->enclosing_compiler;
-  else {
-    current->globals = NULL;
-  }
+  current->globals = NULL;
+  current = current->enclosing_compiler;
   return function;
 }
 
@@ -893,8 +939,16 @@ static void parse_function(FunctionType type) {
   block();
 
   ObjectFunction* function = end_compiler();
+  u16 constant = make_constant(OBJECT_VAL(function));
+  emit_op_u16(OP_CLOSURE, constant);
   current = compiler.enclosing_compiler;
   emit_constant(OBJECT_VAL(function));
+  for (i32 i = 0; i < function->upvalue_count; ++i) {
+    emit_byte((u8)compiler.upvalues[i].is_local);
+    // IF NOT LOCAL: It will store where in the frame above is stored
+    // IF LOCAL : It will store where in the stack is stored
+    emit_byte(compiler.upvalues[i].index);
+  }
 }
 
 static void fun_declaration() {
@@ -956,22 +1010,70 @@ static void declaration(bool _) {
 }
 
 ObjectFunction* compile(const char* source) {
-  // if (symbol_table.capacity != 0) free_table(&symbol_table);
-
   init_scanner(source);
   Compiler compiler;
   compiler.globals = (ValueArray*)malloc(sizeof(ValueArray));
   init_value_array(compiler.globals);
   init_compiler(&compiler, TYPE_SCRIPT);
-
   parser.had_error = 0;
   parser.panic_mode = 0;
   advance();
   while (!match(TOKEN_EOF)) {
     declaration(false);
   }
-  // expression();
   assert_current_and_advance(TOKEN_EOF, "Expected end of expression");
   ObjectFunction* fn = end_compiler();
   return parser.had_error ? NULL : fn;
 }
+
+/*
+
+EXPLANATION ON HOW UPVALUE RESOLVING WORKS
+
+
+                                     ┌───┐      ┌────────────┐
+                                     │...│      │ It's here! │
+                                     └───┘      └───┬────────┘
+                                                    │
+                                ┌──────────────┐    │ ┌─────────────────────────┐
+                                │  Function 2  │    │ │it's on the third element│
+                                └──────────────┘    │ │       of my frame       │
+                                        ▲    ┌──────┘ └─────────────────────────┘
+                                        │    │         ┌────────────────────────────┐
+┌────────────────────────────────────┐  │    │         │                            │
+│    resolve_upvalue("Variable");    │  │    │         │   Will try to store the    │
+└────────────────────────────────────┘  │    │         │      upvalue asked by      │
+                                        │    │         │  the function below, then  │
+                                ┌────────────▼─┐       │ return the index where it  │
+                                │  Function 3  │       │         stored it.         │
+                                └────────────┬─┘       │                            │
+                                        ▲    │         └────────────────────────────┘
+                                        │    │
+  ┌────────────────────────────────────┐│   ┌┘  ┌──────────────────────────────────────────────────────────┐
+  │    resolve_upvalue("Variable");    ││   │   │ it's on the 6th element of my frame! So when you lookup  │
+  └────────────────────────────────────┘│   │   │      for it in the Virtual Machine it will be there      │
+                                        │   │   └──────────────────────────────────────────────────────────┘
+                                ┌───────────▼───┐
+                                │  Function 4   │
+                                └───────────────┘
+                            ┌───────────────────────┐
+                            │Understood, I will save│
+                            │ it on the 1st element │
+                            │of my frame, and store │
+                            │ in which index is in  │
+                            │      your frame!      │
+                            └───────────────────────┘
+** VIRTUAL MACHINE **
+
+ fun a() { --> nothing
+  var x = 0; --> nothing
+  fun b () { --> saves into slot 0 local variable X stored in current frame
+    fun c() { --> saves into slot 0 external variable X stored in b slot 0
+      fun d() { --> saves into slot 0 external variable X stored in c slot 0
+        print x; --> OP_GET_UPVALUE 0 -- current_frame.upvalues[0]
+      }
+      print x; --> OP_GET_UPVALUE 0
+    }
+  }
+}
+*/

@@ -49,8 +49,8 @@ static void runtime_error(const char* format, ...) {
   fputs("\n", stderr);
   for (int i = vm.frame_count - 1; i >= 0; i--) {
     CallFrame* frame = &vm.frames[i];
-    ObjectFunction* fn = frame->function;
-    isize ins = frame->ip - frame->function->chunk.code - 1;
+    ObjectFunction* fn = frame->function->function;
+    isize ins = frame->ip - frame->function->function->chunk.code - 1;
     fprintf(stderr, "[line %d] in ", get_line_from_chunk(&fn->chunk, ins));
     if (fn->name == NULL) {
       fprintf(stderr, "<main>\n");
@@ -58,7 +58,7 @@ static void runtime_error(const char* format, ...) {
       fprintf(stderr, "%s()\n", fn->name->chars);
     }
 
-    u32 line = get_line_from_chunk(&frame->function->chunk, ins);
+    u32 line = get_line_from_chunk(&frame->function->function->chunk, ins);
   }
   reset_stack();
 }
@@ -75,6 +75,23 @@ static bool call_value(Value function_stack_pointer_start, u8 arg_count) {
   }
 
   switch (obj->type) {
+    case OBJECT_CLOSURE: {
+      ObjectClosure* closure = (ObjectClosure*)obj;
+      if (closure->function->number_of_parameters != arg_count) {
+        runtime_error("expected %d parameters, got: %d on `%s` call", closure->function->number_of_parameters,
+                      arg_count, closure->function->name->chars);
+        return false;
+      }
+#ifdef DEBUG_TRACE_EXECUTION
+      printf("[FUNCTION_CALL] Called '%s'\n[FUNCTION_CALL] Adding new frame...\n",
+             closure->function->name->chars == NULL ? "main" : closure->function->name->chars);
+#endif
+      CallFrame* frame = &vm.frames[vm.frame_count++];
+      frame->ip = closure->function->chunk.code;
+      frame->function = closure;
+      frame->slots = vm.stack_top - arg_count - 1;
+      return true;
+    }
     case OBJECT_NATIVE: {
       ObjectNative* native = (ObjectNative*)obj;
       NativeFn fn = native->function;
@@ -96,7 +113,7 @@ static bool call_value(Value function_stack_pointer_start, u8 arg_count) {
 #endif
       CallFrame* frame = &vm.frames[vm.frame_count++];
       frame->ip = fn->chunk.code;
-      frame->function = fn;
+      frame->function = new_closure(fn);
       frame->slots = vm.stack_top - arg_count - 1;
       return true;
       break;
@@ -150,20 +167,20 @@ static InterpretResult run() {
 #define DISPATCH() goto* dispatch_table[READ_BYTE()]
 
 /// Reads the constant from the constant array
-#define READ_CONSTANT() (frame->function->chunk.constants.values[READ_BYTE()])
+#define READ_CONSTANT() (frame->function->function->chunk.constants.values[READ_BYTE()])
 
 /// Constant long is able to contain 2 byte constants
-#define READ_CONSTANT_LONG() (frame->function->chunk.constants.values[(READ_BYTE() << 8) | READ_BYTE()])
+#define READ_CONSTANT_LONG() (frame->function->function->chunk.constants.values[(READ_BYTE() << 8) | READ_BYTE()])
 
 #define READ_STRING() (AS_STRING(READ_CONSTANT_LONG()))
 
-  static void* dispatch_table[] = {&&do_op_return,    &&do_op_constant,      &&do_op_constant_long, &&do_op_negate,
-                                   &&do_op_add,       &&do_op_substract,     &&do_op_multiply,      &&do_op_divide,
-                                   &&do_op_nil,       &&do_op_true,          &&do_op_false,         &&do_op_bang,
-                                   &&do_op_equal,     &&do_op_greater,       &&do_op_less,          &&do_op_print,
-                                   &&do_op_pop,       &&do_op_define_global, &&do_op_get_global,    &&do_op_set_global,
-                                   &&do_op_get_local, &&do_op_set_local,     &&do_op_jump_if_false, &&do_op_jump,
-                                   &&do_op_jump_back, &&do_push_again,       &&do_op_assert,        &&do_op_call};
+  static void* dispatch_table[] = {
+      &&do_op_return,    &&do_op_constant,  &&do_op_constant_long, &&do_op_negate,     &&do_op_add,
+      &&do_op_substract, &&do_op_multiply,  &&do_op_divide,        &&do_op_nil,        &&do_op_true,
+      &&do_op_false,     &&do_op_bang,      &&do_op_equal,         &&do_op_greater,    &&do_op_less,
+      &&do_op_print,     &&do_op_pop,       &&do_op_define_global, &&do_op_get_global, &&do_op_set_global,
+      &&do_op_get_local, &&do_op_set_local, &&do_op_jump_if_false, &&do_op_jump,       &&do_op_jump_back,
+      &&do_push_again,   &&do_op_assert,    &&do_op_call,          &&do_op_closure};
 
 /// BinaryOp does a binary operation on the vm
 #define BINARY_OP(value_type, _op_)                                                                  \
@@ -180,7 +197,7 @@ static InterpretResult run() {
 #ifdef DEBUG_TRACE_EXECUTION
   /// TODO: I don't wanna copy every version of debug_trace_execution :(
   // Prints the current instruction and it's operands
-  dissasemble_instruction(&frame->function->chunk, (u64)(frame->ip - frame->function->chunk.code));
+  dissasemble_instruction(&frame->function->function->chunk, (u64)(frame->ip - frame->function->function->chunk.code));
 
   printf("    ** STACK **     ");
   for (Value* slot = vm.stack; slot < vm.stack_top; slot++) {
@@ -196,7 +213,8 @@ static InterpretResult run() {
   for (;;) {
 #ifdef DEBUG_TRACE_EXECUTION
     // Prints the current instruction and it's operands
-    dissasemble_instruction(&frame->function->chunk, (u32)(frame->ip - frame->function->chunk.code));
+    dissasemble_instruction(&frame->function->function->chunk,
+                            (u32)(frame->ip - frame->function->function->chunk.code));
     printf("    ** STACK **     ");
     for (Value* slot = vm.stack; slot < vm.stack_top; slot++) {
       printf("[ ");
@@ -378,8 +396,8 @@ static InterpretResult run() {
     print_value(PEEK_STACK(0));
     printf("\n");
 #endif
-    // push_value(frame->function->chunk.constants)
-    vm.frames[0].function->global_array->values[index] = pop();
+    // push_value(frame->function->function->chunk.constants)
+    vm.frames[0].function->function->global_array->values[index] = pop();
     // table_set(&vm.globals, name, PEEK_STACK(0));
     continue;
   }
@@ -394,22 +412,22 @@ static InterpretResult run() {
     // } else
     //   printf("[GET_GLOBAL] VALUE NOT FOUND");
 #endif
-    if (index >= vm.frames[0].function->global_array->count) {
+    if (index >= vm.frames[0].function->function->global_array->count) {
       runtime_error("undefined variable %d", index);
       return INTERPRET_RUNTIME_ERROR;
     }
-    push(vm.frames[0].function->global_array->values[index]);
+    push(vm.frames[0].function->function->global_array->values[index]);
     continue;
   }
 
   do_op_set_global : {
     // ...
     u16 index = (READ_BYTE() << 8) | READ_BYTE();
-    if (index >= frame->function->chunk.constants.count) {
+    if (index >= frame->function->function->chunk.constants.count) {
       runtime_error("undefined variable");
       return INTERPRET_RUNTIME_ERROR;
     }
-    vm.frames[0].function->global_array->values[index] =
+    vm.frames[0].function->function->global_array->values[index] =
         PEEK_STACK(0);  // << holy fuck, be careful, this SHOULD be popped by the
                         // variable declaration or expression_stmt Not by this operation
     continue;
@@ -461,6 +479,15 @@ static InterpretResult run() {
     push(PEEK_STACK(0));
     continue;
   }
+  // Transforms a function (in the constants array)
+  // to a closure (Captures all of the variables)
+  do_op_closure : {
+    Value constant = READ_CONSTANT_LONG();
+    ObjectFunction* function = (ObjectFunction*)constant.as.object;
+    ObjectClosure* closure = new_closure(function);
+    push(OBJECT_VAL(closure));
+    continue;
+  }
   }
 #undef READ_BYTE
 #undef READ_STRING
@@ -487,7 +514,10 @@ InterpretResult interpret_source(const char* source) {
   vm.globals = *obj->global_array;
   vm.stack_top = vm.stack;
   push(OBJECT_VAL(obj));
-  call_value(OBJECT_VAL(obj), 0);
+  ObjectClosure* closure = new_closure(obj);
+  pop();
+  push(OBJECT_VAL(closure));
+  call_value(OBJECT_VAL(closure), 0);
   InterpretResult ok = run();
   free_vm();
   free_value_array(obj->global_array);

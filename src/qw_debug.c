@@ -123,20 +123,39 @@ u32 dissasemble_instruction(Chunk* chunk, u32 offset) {
     case OP_SET_LOCAL: {
       return constant_instruction_long("OP_SET_LOCAL", chunk, offset);
     }
+
     case OP_JUMP_IF_FALSE: {
       return constant_instruction_long("OP_JUMP_IF_FALSE", chunk, offset);
     }
+
     case OP_JUMP_BACK: {
       return constant_instruction_long("OP_JUMP_BACK", chunk, offset);
     }
+
     case OP_JUMP: {
       return constant_instruction_long("OP_JUMP", chunk, offset);
     }
+
     case OP_CALL: {
       return constant_instruction("OP_CALL", chunk, offset);
     }
+
     case OP_ASSERT: {
       return simple_instruction("OP_ASSERT", offset);
+    }
+
+    case OP_GET_UPVALUE: {
+      return constant_instruction("OP_GET_UPVALUE", chunk, offset);
+    }
+
+    case OP_SET_UPVALUE: {
+      return constant_instruction("OP_SET_UPVALUE", chunk, offset);
+    }
+
+    case OP_CLOSURE: {
+      // TODO: PRINT CLOSURE : (
+
+      return simple_instruction("OP_CLOSURE", offset);
     }
     default: {
       printf("unknown opcode: %d\n", instruction);

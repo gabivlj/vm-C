@@ -9,6 +9,7 @@ typedef enum {
   OBJECT_STRING,
   OBJECT_FUNCTION,
   OBJECT_NATIVE,
+  OBJECT_CLOSURE,
 } ObjectType;
 
 typedef struct ObjectString ObjectString;

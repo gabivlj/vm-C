@@ -23,6 +23,10 @@ static void free_object(Object* object) {
       FREE(ObjectString, string);
       break;
     }
+    case OBJECT_CLOSURE: {
+      FREE(ObjectClosure, (ObjectClosure*)object);
+      break;
+    }
     case OBJECT_FUNCTION: {
       ObjectFunction* fn = (ObjectFunction*)object;
       free_chunk(&fn->chunk);

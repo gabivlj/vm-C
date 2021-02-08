@@ -56,6 +56,11 @@ static void print_function(ObjectFunction* fn) {
 
 void print_object(Value value) {
   switch (OBJECT_TYPE(value)) {
+    case OBJECT_CLOSURE: {
+      printf("!CLOSURE ");
+      print_function(((ObjectClosure*)value.as.object)->function);
+      break;
+    }
     case OBJECT_STRING: {
       printf("`%s`", AS_CSTRING(value));
       break;
@@ -88,6 +93,7 @@ ObjectFunction* new_function() {
   ObjectFunction* function = ALLOCATE_OBJECT(ObjectFunction, OBJECT_FUNCTION);
   function->name = NULL;
   function->number_of_parameters = 0;
+  function->upvalue_count = 0;
   init_chunk(&function->chunk);
   return function;
 }
@@ -96,4 +102,10 @@ ObjectNative* new_native_function(NativeFn callback) {
   ObjectNative* native = ALLOCATE_OBJECT(ObjectNative, OBJECT_NATIVE);
   native->function = callback;
   return native;
+}
+
+ObjectClosure* new_closure(ObjectFunction* function) {
+  ObjectClosure* closure = ALLOCATE_OBJECT(ObjectClosure, OBJECT_CLOSURE);
+  closure->function = function;
+  return closure;
 }

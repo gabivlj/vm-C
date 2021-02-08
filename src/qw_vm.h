@@ -8,7 +8,7 @@
 
 typedef struct {
   // Points to itself (access to constants)
-  ObjectFunction* function;
+  ObjectClosure* function;
 
   // Points to the instruction pointer
   u8* ip;
