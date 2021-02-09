@@ -10,6 +10,7 @@ typedef enum {
   OBJECT_FUNCTION,
   OBJECT_NATIVE,
   OBJECT_CLOSURE,
+  OBJECT_UPVALUE,
 } ObjectType;
 
 typedef struct ObjectString ObjectString;

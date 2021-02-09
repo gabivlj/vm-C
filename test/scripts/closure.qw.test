@@ -6,13 +6,10 @@ fun closure1() {
       var q = 4;
       return x + z + q;
     }
+    return closure3();
   }
   x = 2;
   return closure2();  
 }
 
-assert closure1() == 9;
-assert closure1() == 9;
-assert closure1() == 9;
-assert closure1() == 9;
 assert closure1() == 9;

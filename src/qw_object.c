@@ -71,8 +71,14 @@ void print_object(Value value) {
     }
     case OBJECT_NATIVE: {
       printf("<native_function [%zu]>\n", (isize)((ObjectNative*)value.as.object)->function);
+      break;
+    }
+    case OBJECT_UPVALUE: {
+      printf("upvalue");
+      break;
     }
     default: {
+      printf("COULDN'T PRINT OBJECT OF TYPE: %d\n", value.as.object->type);
       return;
     }
   }
@@ -94,6 +100,7 @@ ObjectFunction* new_function() {
   function->name = NULL;
   function->number_of_parameters = 0;
   function->upvalue_count = 0;
+  function->global_array = NULL;
   init_chunk(&function->chunk);
   return function;
 }
@@ -107,5 +114,19 @@ ObjectNative* new_native_function(NativeFn callback) {
 ObjectClosure* new_closure(ObjectFunction* function) {
   ObjectClosure* closure = ALLOCATE_OBJECT(ObjectClosure, OBJECT_CLOSURE);
   closure->function = function;
+  ObjectUpvalue** upvalues = ALLOCATE(ObjectUpvalue*, function->upvalue_count);
+  for (u32 i = 0; i < function->upvalue_count; ++i) {
+    upvalues[i] = NULL;
+  }
+  closure->upvalues = upvalues;
+  closure->upvalue_count = function->upvalue_count;
   return closure;
+}
+
+ObjectUpvalue* new_upvalue(Value* slot) {
+  ObjectUpvalue* upvalue = ALLOCATE_OBJECT(ObjectUpvalue, OBJECT_UPVALUE);
+  upvalue->location = slot;
+  upvalue->closed = NIL_VAL;
+  upvalue->next = NULL;
+  return upvalue;
 }

@@ -23,8 +23,14 @@ static void free_object(Object* object) {
       FREE(ObjectString, string);
       break;
     }
+    case OBJECT_UPVALUE: {
+      FREE(ObjectUpvalue, (ObjectUpvalue*)object);
+      break;
+    }
     case OBJECT_CLOSURE: {
-      FREE(ObjectClosure, (ObjectClosure*)object);
+      ObjectClosure* closure = (ObjectClosure*)object;
+      FREE_ARRAY(ObjectUpvalue*, closure->upvalues, closure->upvalue_count);
+      FREE(ObjectClosure, closure);
       break;
     }
     case OBJECT_FUNCTION: {

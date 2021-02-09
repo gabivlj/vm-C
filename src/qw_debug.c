@@ -1,5 +1,7 @@
 #include "qw_debug.h"
 
+#include "qw_object.h"
+
 void dissasemble_chunk(Chunk* chunk, const char* name) {
   printf("=== %s ===\n", name);
   printf("IDX  |   LINE  | OP_CODE    |     INFO\n");
@@ -145,17 +147,26 @@ u32 dissasemble_instruction(Chunk* chunk, u32 offset) {
     }
 
     case OP_GET_UPVALUE: {
-      return constant_instruction("OP_GET_UPVALUE", chunk, offset);
+      return constant_instruction_long("OP_GET_UPVALUE", chunk, offset);
     }
 
     case OP_SET_UPVALUE: {
-      return constant_instruction("OP_SET_UPVALUE", chunk, offset);
+      return constant_instruction_long("OP_SET_UPVALUE", chunk, offset);
     }
-
+    case OP_CLOSE_UPVALUE: {
+      return simple_instruction("OP_CLOSE_UPVALUE", offset);
+    }
     case OP_CLOSURE: {
       // TODO: PRINT CLOSURE : (
 
-      return simple_instruction("OP_CLOSURE", offset);
+      offset = simple_instruction("OP_CLOSURE", offset);
+      ObjectFunction* fn =
+          (ObjectFunction*)chunk->constants.values[(chunk->code[offset] << 8) | chunk->code[(offset + 1)]].as.object;
+      offset += 2;
+      for (u8 i = 0; i < fn->upvalue_count; ++i) {
+        offset += 2;
+      }
+      return offset;
     }
     default: {
       printf("unknown opcode: %d\n", instruction);

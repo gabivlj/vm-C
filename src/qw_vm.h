@@ -45,19 +45,24 @@ typedef struct {
   /// Objects (as a Linked List) stores all the objects in the VM (so we can access them somehow when GC)
   Object* objects;
 
+  /// LinkedList of open_upvalues that the VM is finding along the way, so when the
+  /// user 'closes' with a closure some values, it would find them right here and
+  /// store them in the heap
+  ObjectUpvalue* open_upvalues;
+
 } VM;
 
 typedef enum { INTERPRET_OK, INTERPRET_COMPILER_ERROR, INTERPRET_RUNTIME_ERROR } InterpretResult;
 
 extern VM vm;
 
-void init_vm();
-void free_vm();
+void init_vm(void);
+void free_vm(void);
 void push(Value value);
-Value* stack_vm();
+Value* stack_vm(void);
 InterpretResult interpret_source(const char* source);
 
-Value pop();
+Value pop(void);
 
 InterpretResult interpret(Chunk* chunk);
 

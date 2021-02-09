@@ -18,6 +18,15 @@ typedef struct {
   NativeFn function;
 } ObjectNative;
 
+typedef struct ObjectUpvalue {
+  Object object;
+  // STACK LOCATION OF THE OBJECT
+  Value* location;
+  struct ObjectUpvalue* next;
+  // The copy of the value
+  Value closed;
+} ObjectUpvalue;
+
 struct ObjectString {
   Object object;
   u64 hash;
@@ -39,6 +48,8 @@ typedef struct {
 typedef struct {
   Object object;
   ObjectFunction* function;
+  ObjectUpvalue** upvalues;
+  u32 upvalue_count;
 } ObjectClosure;
 
 #define OBJECT_TYPE(value) (AS_OBJECT(value)->type)
@@ -58,7 +69,8 @@ ObjectString* allocate_string(u32 length, u32 hash);
 Object* allocate_object(ObjectType type, isize true_size);
 #define ALLOCATE_OBJECT(object_type, enum_type) (object_type*)allocate_object(enum_type, sizeof(object_type))
 ObjectClosure* new_closure(ObjectFunction* function);
-ObjectFunction* new_function();
+ObjectFunction* new_function(void);
+ObjectUpvalue* new_upvalue(Value* slot);
 ObjectNative* new_native_function(NativeFn callback);
 ObjectString* copy_string(u32 length, const char* start);
 u32 hash_string(char* str, u32 length);

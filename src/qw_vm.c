@@ -18,6 +18,7 @@ VM vm;
 static void reset_stack() {
   vm.stack_top = vm.stack;
   vm.frame_count = 0;
+  vm.open_upvalues = NULL;
 }
 
 void push(Value value) {
@@ -33,12 +34,57 @@ Value pop() {
 void init_vm() {
   reset_stack();
   vm.objects = NULL;
+  vm.open_upvalues = NULL;
   init_table(&vm.strings);
 }
 
 void free_vm() {
   free_objects();
   free_table(&vm.strings);
+}
+
+/// When the function/block is gonna go out of scope,
+/// it needs to keep a reference to the variables that it captured,
+/// so what it does is translating them from the stack to the heap
+static void close_upvalues(Value* stack_top) {
+  // Locations are always above the stack_top...
+  while (vm.open_upvalues != NULL && vm.open_upvalues->location >= stack_top) {
+    ObjectUpvalue* upvalue = vm.open_upvalues;
+#ifdef DEBUG_TRACE_EXECUTION
+    printf("[CLOSE_UPVALUES] CLOSING UPVALUE:");
+    print_value(*upvalue->location);
+    printf("\n");
+#endif
+    upvalue->closed = *upvalue->location;
+    upvalue->location = &upvalue->closed;
+    vm.open_upvalues = vm.open_upvalues->next;
+  }
+}
+
+static ObjectUpvalue* capture_upvalue(Value* stack_pointer) {
+  ObjectUpvalue* previous_upvalue = NULL;
+  ObjectUpvalue* upvalue = vm.open_upvalues;
+
+  while (upvalue != NULL && upvalue->location > stack_pointer) {
+    previous_upvalue = upvalue;
+    upvalue = upvalue->next;
+  }
+
+  // if we found an upvalue == to the stack_pointer, we reuse it
+  if (upvalue != NULL && upvalue->location == stack_pointer) {
+    return upvalue;
+  }
+
+  // if we didn't find a matching upvalue, we create one and add it in
+  // the middle of the linked list
+  ObjectUpvalue* created_upvalue = new_upvalue(stack_pointer);
+  created_upvalue->next = upvalue;
+  if (previous_upvalue == NULL) {
+    vm.open_upvalues = created_upvalue;
+  } else {
+    previous_upvalue->next = created_upvalue;
+  }
+  return created_upvalue;
 }
 
 static void runtime_error(const char* format, ...) {
@@ -51,14 +97,14 @@ static void runtime_error(const char* format, ...) {
     CallFrame* frame = &vm.frames[i];
     ObjectFunction* fn = frame->function->function;
     isize ins = frame->ip - frame->function->function->chunk.code - 1;
-    fprintf(stderr, "[line %d] in ", get_line_from_chunk(&fn->chunk, ins));
+    fprintf(stderr, "[line %d] in ", (u32) get_line_from_chunk(&fn->chunk, (u32) ins));
     if (fn->name == NULL) {
       fprintf(stderr, "<main>\n");
     } else {
       fprintf(stderr, "%s()\n", fn->name->chars);
     }
 
-    u32 line = get_line_from_chunk(&frame->function->function->chunk, ins);
+//    u32 line = get_line_from_chunk(&frame->function->function->chunk, ins);
   }
   reset_stack();
 }
@@ -83,8 +129,8 @@ static bool call_value(Value function_stack_pointer_start, u8 arg_count) {
         return false;
       }
 #ifdef DEBUG_TRACE_EXECUTION
-      printf("[FUNCTION_CALL] Called '%s'\n[FUNCTION_CALL] Adding new frame...\n",
-             closure->function->name->chars == NULL ? "main" : closure->function->name->chars);
+      printf("[CLOSURE] Called '%s'\n[CLOSURE] Adding new frame...\n",
+             closure->function->name == NULL ? "main" : closure->function->name->chars);
 #endif
       CallFrame* frame = &vm.frames[vm.frame_count++];
       frame->ip = closure->function->chunk.code;
@@ -130,14 +176,14 @@ static inline void concatenate() {
   ObjectString* left = AS_STRING(pop());
   // The hash is done while copying
   u32 hash = 2166136261u;
-  ObjectString* new_string = allocate_string(left->length + right->length, 0);
+  ObjectString* new_string = allocate_string((u32) left->length + (u32) right->length, 0);
   for (int i = 0, j = 0; i < left->length; i++, j++) {
     new_string->chars[i] = left->chars[j];
     hash ^= (u32)new_string->chars[i];
     hash *= 16777619;
   }
   // start from the left->length until left->length + right->length copying each char
-  for (int i = left->length, j = 0; i < left->length + right->length; i++, j++) {
+  for (int i = (int) left->length, j = 0; i < left->length + right->length; i++, j++) {
     new_string->chars[i] = right->chars[j];
     hash ^= (u32)new_string->chars[i];
     hash *= 16777619;
@@ -145,7 +191,7 @@ static inline void concatenate() {
   new_string->chars[new_string->length] = 0;
   new_string->hash = hash;
   // Check if we have an already existing string in the string intern so we reuse its memory address
-  ObjectString* intern_string = table_find_string(&vm.strings, new_string->chars, new_string->length, hash);
+  ObjectString* intern_string = table_find_string(&vm.strings, new_string->chars, (u32) new_string->length, hash);
   if (intern_string != NULL) {
     FREE_ARRAY(char, new_string, new_string->length + 1);
     new_string = intern_string;
@@ -155,8 +201,8 @@ static inline void concatenate() {
 
 static InterpretResult run() {
   CallFrame* frame = &vm.frames[vm.frame_count - 1];
-  u8* ip = frame->ip;
-  u8* initial = frame->ip;
+//  u8* ip = frame->ip;
+//  u8* initial = frame->ip;
 
 /// Returns the value of the current instrucction
 /// and advances instruction pointer to the next byte
@@ -175,12 +221,13 @@ static InterpretResult run() {
 #define READ_STRING() (AS_STRING(READ_CONSTANT_LONG()))
 
   static void* dispatch_table[] = {
-      &&do_op_return,    &&do_op_constant,  &&do_op_constant_long, &&do_op_negate,     &&do_op_add,
-      &&do_op_substract, &&do_op_multiply,  &&do_op_divide,        &&do_op_nil,        &&do_op_true,
-      &&do_op_false,     &&do_op_bang,      &&do_op_equal,         &&do_op_greater,    &&do_op_less,
-      &&do_op_print,     &&do_op_pop,       &&do_op_define_global, &&do_op_get_global, &&do_op_set_global,
-      &&do_op_get_local, &&do_op_set_local, &&do_op_jump_if_false, &&do_op_jump,       &&do_op_jump_back,
-      &&do_push_again,   &&do_op_assert,    &&do_op_call,          &&do_op_closure};
+      &&do_op_return,      &&do_op_constant,     &&do_op_constant_long, &&do_op_negate,     &&do_op_add,
+      &&do_op_substract,   &&do_op_multiply,     &&do_op_divide,        &&do_op_nil,        &&do_op_true,
+      &&do_op_false,       &&do_op_bang,         &&do_op_equal,         &&do_op_greater,    &&do_op_less,
+      &&do_op_print,       &&do_op_pop,          &&do_op_define_global, &&do_op_get_global, &&do_op_set_global,
+      &&do_op_get_local,   &&do_op_set_local,    &&do_op_jump_if_false, &&do_op_jump,       &&do_op_jump_back,
+      &&do_push_again,     &&do_op_assert,       &&do_op_call,          &&do_op_closure,    &&do_op_get_upvalue,
+      &&do_op_set_upvalue, &&do_op_close_upvalue};
 
 /// BinaryOp does a binary operation on the vm
 #define BINARY_OP(value_type, _op_)                                                                  \
@@ -208,6 +255,21 @@ static InterpretResult run() {
   printf("\n");
 #endif
 
+#ifdef DEBUG_TRACE_EXECUTION
+  /// TODO: I don't wanna copy every version of debug_trace_execution :(
+  // Prints the current instruction and it's operands
+  // dissasemble_instruction(&frame->function->function->chunk, (u64)(frame->ip -
+  // frame->function->function->chunk.code));
+
+  printf("    ** UPVALUES **     ");
+  for (u32 i = 0; i < frame->function->upvalue_count; i++) {
+    printf("[ ");
+    print_value(*(*(frame->function->upvalues + i))->location);
+    printf(" ]");
+  }
+  printf("\n");
+#endif
+
   // Goto current opcode handler
   DISPATCH();
   for (;;) {
@@ -219,6 +281,21 @@ static InterpretResult run() {
     for (Value* slot = vm.stack; slot < vm.stack_top; slot++) {
       printf("[ ");
       print_value(*slot);
+      printf(" ]");
+    }
+    printf("\n");
+#endif
+
+#ifdef DEBUG_TRACE_EXECUTION
+    /// TODO: I don't wanna copy every version of debug_trace_execution :(
+    // Prints the current instruction and it's operands
+    // dissasemble_instruction(&frame->function->function->chunk, (u64)(frame->ip -
+    // frame->function->function->chunk.code));
+
+    printf("    ** UPVALUES **     ");
+    for (u32 i = 0; i < frame->function->upvalue_count; i++) {
+      printf("[ ");
+      print_value(*(*(frame->function->upvalues + i))->location);
       printf(" ]");
     }
     printf("\n");
@@ -238,6 +315,8 @@ static InterpretResult run() {
 
   do_op_return : {
     Value result = pop();
+    // Copy all of the open values to their upvalues.
+    close_upvalues(frame->slots);
     vm.frame_count--;
     if (vm.frame_count == 0) {
       // Pop the frame
@@ -246,7 +325,7 @@ static InterpretResult run() {
     }
     vm.stack_top = frame->slots;
     push(result);
-    frame = &vm.frames[vm.frame_count - 1];
+//    frame = &vm.frames[vm.frame_count - 1];
     return INTERPRET_OK;
   }
 
@@ -479,12 +558,47 @@ static InterpretResult run() {
     push(PEEK_STACK(0));
     continue;
   }
+
+  do_op_close_upvalue : {
+    close_upvalues(vm.stack_top - 1);
+    pop();
+    continue;
+  }
+
+  do_op_get_upvalue : {
+    push(*frame->function->upvalues[(READ_BYTE() << 8) | READ_BYTE()]->location);
+    continue;
+  }
+
+  do_op_set_upvalue : {
+    u16 slot = (READ_BYTE() << 8) | READ_BYTE();
+    *frame->function->upvalues[slot]->location = PEEK_STACK(0);
+    continue;
+  }
+
   // Transforms a function (in the constants array)
   // to a closure (Captures all of the variables)
   do_op_closure : {
     Value constant = READ_CONSTANT_LONG();
     ObjectFunction* function = (ObjectFunction*)constant.as.object;
     ObjectClosure* closure = new_closure(function);
+#ifdef DEBUG_TRACE_EXECUTION
+    printf("[OP_CLOSURE] Capturing upvalues: %d\n", closure->upvalue_count);
+#endif
+    for (u32 i = 0; i < closure->upvalue_count; ++i) {
+      // Check if it's just above this
+      u8 is_local = READ_BYTE();
+      // Index (maybe stack, maybe upvalues)
+      u8 index = READ_BYTE();
+#ifdef DEBUG_TRACE_EXECUTION
+      printf("[OP_CLOSURE] Capturing upvalue is_local: %d, index: %d\n", is_local, index);
+#endif
+      if (is_local) {
+        closure->upvalues[i] = capture_upvalue(index + frame->slots);
+      } else {
+        closure->upvalues[i] = frame->function->upvalues[index];
+      }
+    }
     push(OBJECT_VAL(closure));
     continue;
   }
@@ -507,10 +621,10 @@ Value* stack_vm() { return vm.stack; }
 
 InterpretResult interpret_source(const char* source) {
   ObjectFunction* obj;
+  init_vm();
   if (!(obj = compile(source))) {
     return INTERPRET_COMPILER_ERROR;
   }
-  init_vm();
   vm.globals = *obj->global_array;
   vm.stack_top = vm.stack;
   push(OBJECT_VAL(obj));

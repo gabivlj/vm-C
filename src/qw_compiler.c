@@ -38,12 +38,13 @@ typedef struct {
   Precedence precedence;
 } ParseRule;
 
-#define UINT16_COUNT (UINT16_MAX + 1)
+#define UINT16_COUNT (UINT8_MAX + 1)
 
 typedef struct {
   Token name;
   i32 depth;
   bool mutable;
+  bool is_captured;
 } Local;
 
 typedef struct {
@@ -152,7 +153,7 @@ static void init_compiler(Compiler* compiler_parameter, FunctionType type) {
   compiler_parameter->scope_depth = 0;
   compiler_parameter->function_type = type;
   compiler_parameter->function = new_function();
-
+  compiler_parameter->globals = NULL;
   if (current == NULL || current->globals == NULL) {
     compiler_parameter->globals = malloc(sizeof(ValueArray));
     init_value_array(compiler_parameter->globals);
@@ -171,6 +172,7 @@ static void init_compiler(Compiler* compiler_parameter, FunctionType type) {
   local->depth = 0;
   local->name.start = "";
   local->name.length = 0;
+  local->is_captured = false;
   if (compiler_parameter->enclosing_compiler == NULL) {
     if (symbol_table.capacity != 0) {
       free_table(&symbol_table);
@@ -267,16 +269,16 @@ static void synchronize() {
   }
 }
 
-static void expression();
+static void expression(void);
 
 /// Returns the index of the local (in the stack)
 static i32 resolve_local(Compiler* compiler, Token* name) {
   for (i32 i = compiler->local_count - 1; i >= 0; i--) {
     Local* local = &compiler->locals[i];
     if (local->name.length == name->length && memcmp(local->name.start, name->start, name->length) == 0) {
-      if (!local->mutable) {
-        error_at_current("Can't modify `let` ummutable variable");
-      }
+      // if (!local->mutable) {
+      //   error_at_current("Can't modify `let` ummutable variable");
+      // }
       return i;
     }
   }
@@ -287,7 +289,7 @@ i32 add_upvalue(Compiler* compiler, i32 upvalue_index, bool is_local) {
   u32 upvalue_count = compiler->function->upvalue_count;
   for (i32 i = 0; i < upvalue_count; i++) {
     Upvalue* upvalue = &compiler->upvalues[i];
-    if (upvalue->index == i && upvalue->is_local == is_local) {
+    if (upvalue->index == upvalue_index && upvalue->is_local == is_local) {
       return i;
     }
   }
@@ -308,6 +310,7 @@ static i32 resolve_upvalue(Compiler* compiler, Token* name) {
 
   // It means that it's just above this function
   if (local != -1) {
+    compiler->enclosing_compiler->locals[local].is_captured = true;
     return add_upvalue(compiler, local, true);
   }
 
@@ -417,7 +420,7 @@ static i32 add_variable_to_global_symbols(Token* name, bool mutable, bool can_as
 }
 
 static void add_native_function(const char* name, NativeFn function) {
-  ObjectString* name_str = copy_string(strlen(name), name);
+  ObjectString* name_str = copy_string((u32) strlen(name), name);
   ObjectNative* native_fn = new_native_function(function);
   Value object_value = OBJECT_VAL(native_fn);
   Value fill_value;
@@ -460,7 +463,10 @@ static inline void end_scope() {
   --current->scope_depth;
   // Pop out of the scope all the declared variables...
   while (current->local_count > 0 && current->locals[current->local_count - 1].depth > current->scope_depth) {
-    emit_byte(OP_POP);
+    if (current->locals[current->local_count - 1].is_captured)
+      emit_byte(OP_CLOSE_UPVALUE);
+    else
+      emit_byte(OP_POP);
     --current->local_count;
   }
 }
@@ -500,6 +506,7 @@ static void add_local(Token name, bool mutable) {
   local->name = name;
   local->depth = -1;
   local->mutable = mutable;
+  local->is_captured = false;
 }
 
 static void try_declare_local_variable(bool mutable) {
@@ -833,7 +840,7 @@ static void for_statement() {
   end_scope();
 }
 
-static void when_condition();
+static void when_condition(void);
 static void handle_token_bar() {
   // This is the equivalent of doing an OR
   i32 else_jump = emit_jump(OP_JUMP_IF_FALSE);
@@ -941,17 +948,19 @@ static void parse_function(FunctionType type) {
   ObjectFunction* function = end_compiler();
   u16 constant = make_constant(OBJECT_VAL(function));
   emit_op_u16(OP_CLOSURE, constant);
-  current = compiler.enclosing_compiler;
-  emit_constant(OBJECT_VAL(function));
+
+  // emit_constant(OBJECT_VAL(function));
   for (i32 i = 0; i < function->upvalue_count; ++i) {
-    emit_byte((u8)compiler.upvalues[i].is_local);
+    emit_byte(compiler.upvalues[i].is_local ? 1 : 0);
     // IF NOT LOCAL: It will store where in the frame above is stored
     // IF LOCAL : It will store where in the stack is stored
     emit_byte(compiler.upvalues[i].index);
   }
+  // end_scope();
 }
 
-static void fun_declaration() {
+//0x7ffeef3ffff8
+static void fun_declaration(void) {
   u16 global = parse_variable("Expected function name.", false);
   mark_initialized();
   parse_function(TYPE_FUNCTION);
@@ -1012,8 +1021,6 @@ static void declaration(bool _) {
 ObjectFunction* compile(const char* source) {
   init_scanner(source);
   Compiler compiler;
-  compiler.globals = (ValueArray*)malloc(sizeof(ValueArray));
-  init_value_array(compiler.globals);
   init_compiler(&compiler, TYPE_SCRIPT);
   parser.had_error = 0;
   parser.panic_mode = 0;

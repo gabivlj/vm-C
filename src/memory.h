@@ -9,6 +9,6 @@
 void* reallocate(void* pointer, isize old_size, isize new_size);
 #define ALLOCATE(type, length) (type*)reallocate(NULL, 0, sizeof(type) * (length))
 
-void free_objects();
+void free_objects(void);
 
 #endif

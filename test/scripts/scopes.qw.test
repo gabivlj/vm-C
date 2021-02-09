@@ -1,0 +1,13 @@
+fun function() {
+  var x = 3;
+  var z = 3;
+  var y = 4;
+  var k = 5;
+  assert k == 5;
+  k = 3;
+  assert k == 3;
+}
+
+function();
+function();
+function();

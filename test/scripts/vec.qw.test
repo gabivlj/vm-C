@@ -1,0 +1,19 @@
+fun new_vec(x, y) {
+  fun constructor(what) {
+    fun sum(vec1, vec2) {
+      return new_vec(vec1("x") + vec2("x"), vec1("y") + vec2("y"));
+    }
+    when what {
+      "x" -> return x;
+      "y" -> return y;
+      "sum" -> return sum;
+      nothing -> return 0;
+    }
+  }
+
+  return constructor;
+}
+
+assert new_vec(3, 1)("x") == 3;
+assert new_vec(3, 1)("y") == 1;
+assert new_vec(0, 0)("sum")(new_vec(3, 4), new_vec(5, 2))("x") == 8;

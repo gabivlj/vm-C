@@ -115,9 +115,9 @@ ObjectString* table_find_string(Table* table, const char* chars, u32 length, u32
   for (;;) {
     Entry* entry = &table->entries[index];
     // If not tombstone and a null key stop.
-    if (entry->key == NULL && IS_NIL(entry->value)) {
+    if (entry == NULL || (entry->key == NULL && IS_NIL(entry->value))) {
       return NULL;
-    } else if (entry->key->length == length && entry->key->hash == hash &&
+    } else if (entry != NULL && entry->key != NULL && entry->key->length == length && entry->key->hash == hash &&
                memcmp(entry->key->chars, chars, length) == 0) {
       return entry->key;
     }

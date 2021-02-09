@@ -45,6 +45,7 @@ void print_value(Value value) {
       print_object(value);
       break;
     default: {
+      printf("COULDN'T PRINT VALUE OF TYPE: %d\n", value.type);
       return;
     }
   }

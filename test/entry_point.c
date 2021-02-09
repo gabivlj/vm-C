@@ -211,10 +211,35 @@ TEST test_lines(void) {
 }
 
 TEST test_file_compilations() {
-  const u32 number_of_scripts = 2;
+  const u32 number_of_scripts = 26 * 4;
   const char* scripts[] = {
-      "./scripts/fib.qw.test",
-      "./scripts/when.qw.test",
+      // "./scripts/fib.qw.test",
+      "./scripts/when.qw.test",   "./scripts/closure.qw.test", "./scripts/scopes.qw.test", "./scripts/vec.qw.test",
+      "./scripts/vec.qw.test",    "./scripts/vec.qw.test",     "./scripts/vec.qw.test",    "./scripts/vec.qw.test",
+      "./scripts/vec.qw.test",    "./scripts/vec.qw.test",     "./scripts/vec.qw.test",    "./scripts/vec.qw.test",
+      "./scripts/vec.qw.test",    "./scripts/vec.qw.test",     "./scripts/vec.qw.test",    "./scripts/vec.qw.test",
+      "./scripts/vec.qw.test",    "./scripts/vec.qw.test",     "./scripts/vec.qw.test",    "./scripts/vec.qw.test",
+      "./scripts/vec.qw.test",    "./scripts/vec.qw.test",     "./scripts/vec.qw.test",    "./scripts/vec.qw.test",
+      "./scripts/vec.qw.test",    "./scripts/vec.qw.test",     "./scripts/when.qw.test",   "./scripts/closure.qw.test",
+      "./scripts/scopes.qw.test", "./scripts/vec.qw.test",     "./scripts/vec.qw.test",    "./scripts/vec.qw.test",
+      "./scripts/vec.qw.test",    "./scripts/vec.qw.test",     "./scripts/vec.qw.test",    "./scripts/vec.qw.test",
+      "./scripts/vec.qw.test",    "./scripts/vec.qw.test",     "./scripts/vec.qw.test",    "./scripts/vec.qw.test",
+      "./scripts/vec.qw.test",    "./scripts/vec.qw.test",     "./scripts/vec.qw.test",    "./scripts/vec.qw.test",
+      "./scripts/vec.qw.test",    "./scripts/vec.qw.test",     "./scripts/vec.qw.test",    "./scripts/vec.qw.test",
+      "./scripts/vec.qw.test",    "./scripts/vec.qw.test",     "./scripts/vec.qw.test",    "./scripts/vec.qw.test",
+      "./scripts/when.qw.test",   "./scripts/closure.qw.test", "./scripts/scopes.qw.test", "./scripts/vec.qw.test",
+      "./scripts/vec.qw.test",    "./scripts/vec.qw.test",     "./scripts/vec.qw.test",    "./scripts/vec.qw.test",
+      "./scripts/vec.qw.test",    "./scripts/vec.qw.test",     "./scripts/vec.qw.test",    "./scripts/vec.qw.test",
+      "./scripts/vec.qw.test",    "./scripts/vec.qw.test",     "./scripts/vec.qw.test",    "./scripts/vec.qw.test",
+      "./scripts/vec.qw.test",    "./scripts/vec.qw.test",     "./scripts/vec.qw.test",    "./scripts/vec.qw.test",
+      "./scripts/vec.qw.test",    "./scripts/vec.qw.test",     "./scripts/vec.qw.test",    "./scripts/vec.qw.test",
+      "./scripts/vec.qw.test",    "./scripts/vec.qw.test",     "./scripts/when.qw.test",   "./scripts/closure.qw.test",
+      "./scripts/scopes.qw.test", "./scripts/vec.qw.test",     "./scripts/vec.qw.test",    "./scripts/vec.qw.test",
+      "./scripts/vec.qw.test",    "./scripts/vec.qw.test",     "./scripts/vec.qw.test",    "./scripts/vec.qw.test",
+      "./scripts/vec.qw.test",    "./scripts/vec.qw.test",     "./scripts/vec.qw.test",    "./scripts/vec.qw.test",
+      "./scripts/vec.qw.test",    "./scripts/vec.qw.test",     "./scripts/vec.qw.test",    "./scripts/vec.qw.test",
+      "./scripts/vec.qw.test",    "./scripts/vec.qw.test",     "./scripts/vec.qw.test",    "./scripts/vec.qw.test",
+      "./scripts/vec.qw.test",    "./scripts/vec.qw.test",     "./scripts/vec.qw.test",    "./scripts/vec.qw.test",
   };
   for (u16 i = 0; i < number_of_scripts; ++i) {
     char* f = read_file(scripts[i]);
