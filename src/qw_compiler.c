@@ -15,59 +15,7 @@
 #include "qw_object.h"
 #include "qw_scanner.h"
 #include "qw_table.h"
-
-typedef enum {
-  PREC_NONE,
-  PREC_ASSIGNMENT,  // =
-  PREC_OR,          // or
-  PREC_AND,         // and
-  PREC_EQUALITY,    // == !=
-  PREC_COMPARISON,  // < > <= >=
-  PREC_TERM,        // + -
-  PREC_FACTOR,      // * /
-  PREC_UNARY,       // ! -
-  PREC_CALL,        // . ()
-  PREC_PRIMARY
-} Precedence;
-
-typedef void (*ParseFn)(bool);
-
-typedef struct {
-  ParseFn prefix;
-  ParseFn infix;
-  Precedence precedence;
-} ParseRule;
-
-#define UINT16_COUNT (UINT8_MAX + 1)
-
-typedef struct {
-  Token name;
-  i32 depth;
-  bool mutable;
-  bool is_captured;
-} Local;
-
-typedef struct {
-  u8 index;
-  bool is_local;
-} Upvalue;
-
-typedef enum {
-  TYPE_FUNCTION,
-  TYPE_SCRIPT,
-} FunctionType;
-
-typedef struct Compiler {
-  // The compiler which was called brom
-  struct Compiler* enclosing_compiler;
-  ObjectFunction* function;
-  FunctionType function_type;
-  ValueArray* globals;
-  Local locals[UINT16_COUNT];
-  i32 local_count;
-  i32 scope_depth;
-  Upvalue upvalues[UINT8_MAX];
-} Compiler;
+#include "qw_vm.h"
 
 static void binary(bool);
 static void unary(bool);
@@ -143,16 +91,28 @@ typedef struct {
 
 Parser parser;
 
-Compiler* current = NULL;
-
 Table symbol_table;
+
+Compiler* current;
+
+void mark_compiler_roots() {
+  Compiler* compiler = current;
+  while (compiler != NULL) {
+    mark_array(compiler->globals);
+    mark_object((Object*)compiler->function);
+    compiler = compiler->enclosing_compiler;
+  }
+  mark_table(&symbol_table);
+}
 
 static void init_compiler(Compiler* compiler_parameter, FunctionType type) {
   compiler_parameter->function = NULL;
   compiler_parameter->local_count = 0;
+  compiler_parameter->function = NULL;
   compiler_parameter->scope_depth = 0;
   compiler_parameter->function_type = type;
   compiler_parameter->function = new_function();
+  push(OBJECT_VAL(compiler_parameter->function));
   compiler_parameter->globals = NULL;
   if (current == NULL || current->globals == NULL) {
     compiler_parameter->globals = malloc(sizeof(ValueArray));
@@ -163,7 +123,7 @@ static void init_compiler(Compiler* compiler_parameter, FunctionType type) {
   //
   compiler_parameter->enclosing_compiler = current;
   current = compiler_parameter;
-
+  pop();
   if (type != TYPE_SCRIPT) {
     current->function->name = copy_string(parser.previous.length, parser.previous.start);
   }
@@ -175,17 +135,22 @@ static void init_compiler(Compiler* compiler_parameter, FunctionType type) {
   local->is_captured = false;
   if (compiler_parameter->enclosing_compiler == NULL) {
     if (symbol_table.capacity != 0) {
-      free_table(&symbol_table);
+//      free_table(&symbol_table);
     }
     init_table(&symbol_table);
-    add_native_function("clock", clock_native);
+    //    add_native_function("clock", clock_native);
   }
 }
 
 static Chunk* current_chunk() { return &current->function->chunk; }
 // We use add_constant_opcode (internal logic inside chunk.h) because
 // it handles as well which kind of OP_CONSTANT to use
-static u32 emit_constant(Value value) { return add_constant_opcode(current_chunk(), value, parser.previous.line); }
+static u32 emit_constant(Value value) {
+  push(value);
+  u32 v = add_constant_opcode(current_chunk(), value, parser.previous.line);
+  pop();
+  return v;
+}
 
 static inline void emit_byte(u8 byte) { write_chunk(current_chunk(), byte, parser.previous.line); }
 static inline void emit_u16(u16 value) { write_chunk_u16(current_chunk(), value, parser.previous.line); }
@@ -205,7 +170,10 @@ static inline void emit_empty_return() {
 
 static u32 make_constant(Value val) {
   //
-  return add_constant(current_chunk(), val);
+  push(val);
+  i32 index = add_constant(current_chunk(), val);
+  pop();
+  return index;
 }
 
 static void error_at(Token* token, const char* message) {
@@ -400,9 +368,11 @@ static void parse_precedence(Precedence precedence) {
 ///       return -1 as well?
 static i32 add_variable_to_global_symbols(Token* name, bool mutable, bool can_assign) {
   ObjectString* str = copy_string(name->length, name->start);
+  push(OBJECT_VAL(str));
   Value value;
   bool exists = table_get(&symbol_table, str, &value);
   if (exists) {
+    pop();
     // if (mutable && value.type == VAL_INTERNAL_COMPILER_IMMUTABLE && can_assign) return -1;
     return (u16)value.as.number;
   }
@@ -416,13 +386,18 @@ static i32 add_variable_to_global_symbols(Token* name, bool mutable, bool can_as
   push_value(current->globals, nil);
   value.as.number = current->globals->count - 1;
   table_set(&symbol_table, str, value);
+  pop();
   return value.as.number;
 }
 
 static void add_native_function(const char* name, NativeFn function) {
-  ObjectString* name_str = copy_string((u32) strlen(name), name);
+  ObjectString* name_str = copy_string((u32)strlen(name), name);
   ObjectNative* native_fn = new_native_function(function);
   Value object_value = OBJECT_VAL(native_fn);
+  push(OBJECT_VAL(name_str));
+  push(object_value);
+  push_value(current->globals, object_value);
+  pop();
   Value fill_value;
   bool exists = table_get(&symbol_table, name_str, &fill_value);
   if (exists) {
@@ -430,9 +405,9 @@ static void add_native_function(const char* name, NativeFn function) {
     return;
   }
   fill_value.type = VAL_INTERNAL_COMPILER_IMMUTABLE;
-  push_value(current->globals, object_value);
   fill_value.as.number = current->globals->count - 1;
   table_set(&symbol_table, name_str, fill_value);
+  pop();
 }
 
 static inline void mark_initialized() {
@@ -559,7 +534,6 @@ static inline ObjectFunction* end_compiler() {
     dissasemble_chunk(&function->chunk, function->name != NULL ? function->name->chars : "<script>");
   }
 #endif
-  current->globals = NULL;
   current = current->enclosing_compiler;
   return function;
 }
@@ -946,7 +920,9 @@ static void parse_function(FunctionType type) {
   block();
 
   ObjectFunction* function = end_compiler();
+  push(OBJECT_VAL(function));
   u16 constant = make_constant(OBJECT_VAL(function));
+  pop();
   emit_op_u16(OP_CLOSURE, constant);
 
   // emit_constant(OBJECT_VAL(function));
@@ -959,7 +935,7 @@ static void parse_function(FunctionType type) {
   // end_scope();
 }
 
-//0x7ffeef3ffff8
+// 0x7ffeef3ffff8
 static void fun_declaration(void) {
   u16 global = parse_variable("Expected function name.", false);
   mark_initialized();

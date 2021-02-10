@@ -2,6 +2,7 @@
 
 #include "memory.h"
 #include "qw_object.h"
+#include "qw_vm.h"
 
 void init_value_array(ValueArray* array) {
   array->values = NULL;
@@ -15,6 +16,7 @@ void push_value(ValueArray* array, Value value) {
     array->capacity = GROW_CAPACITY(old_capacity);
     array->values = GROW_ARRAY(Value, array->values, old_capacity, array->capacity);
   }
+
   array->values[array->count++] = value;
 }
 

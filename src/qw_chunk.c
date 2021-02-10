@@ -4,6 +4,7 @@
 
 #include "memory.h"
 #include "qw_values.h"
+#include "qw_vm.h"
 
 /// Initializes a chunk
 void init_chunk(Chunk* chunk) {
@@ -57,7 +58,9 @@ void free_chunk(Chunk* chunk) {
 }
 
 u32 add_constant(Chunk* chunk, Value value) {
+  // push(value);
   push_value(&chunk->constants, value);
+  // pop();
   return chunk->constants.count - 1;
 }
 

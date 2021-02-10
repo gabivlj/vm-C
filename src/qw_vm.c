@@ -9,7 +9,7 @@
 #include "qw_debug.h"
 #include "qw_object.h"
 
-// #define DEBUG_TRACE_EXECUTION
+#define DEBUG_TRACE_EXECUTION
 
 #define PEEK_STACK(distance) *(vm.stack_top - 1 - distance)
 
@@ -34,6 +34,9 @@ Value pop() {
 void init_vm() {
   reset_stack();
   vm.objects = NULL;
+  vm.gray_stack_gc.count = 0;
+  vm.gray_stack_gc.capacity = 0;
+  vm.gray_stack_gc.stack = NULL;
   vm.open_upvalues = NULL;
   init_table(&vm.strings);
 }
@@ -97,14 +100,14 @@ static void runtime_error(const char* format, ...) {
     CallFrame* frame = &vm.frames[i];
     ObjectFunction* fn = frame->function->function;
     isize ins = frame->ip - frame->function->function->chunk.code - 1;
-    fprintf(stderr, "[line %d] in ", (u32) get_line_from_chunk(&fn->chunk, (u32) ins));
+    fprintf(stderr, "[line %d] in ", (u32)get_line_from_chunk(&fn->chunk, (u32)ins));
     if (fn->name == NULL) {
       fprintf(stderr, "<main>\n");
     } else {
       fprintf(stderr, "%s()\n", fn->name->chars);
     }
 
-//    u32 line = get_line_from_chunk(&frame->function->function->chunk, ins);
+    //    u32 line = get_line_from_chunk(&frame->function->function->chunk, ins);
   }
   reset_stack();
 }
@@ -172,18 +175,19 @@ static bool call_value(Value function_stack_pointer_start, u8 arg_count) {
 }
 
 static inline void concatenate() {
-  ObjectString* right = AS_STRING(pop());
-  ObjectString* left = AS_STRING(pop());
+  ObjectString* right = AS_STRING(PEEK_STACK(0));
+  ObjectString* left = AS_STRING(PEEK_STACK(1));
   // The hash is done while copying
   u32 hash = 2166136261u;
-  ObjectString* new_string = allocate_string((u32) left->length + (u32) right->length, 0);
+  ObjectString* new_string = allocate_string((u32)left->length + (u32)right->length, 0);
+  push(OBJECT_VAL(new_string));
   for (int i = 0, j = 0; i < left->length; i++, j++) {
     new_string->chars[i] = left->chars[j];
     hash ^= (u32)new_string->chars[i];
     hash *= 16777619;
   }
   // start from the left->length until left->length + right->length copying each char
-  for (int i = (int) left->length, j = 0; i < left->length + right->length; i++, j++) {
+  for (int i = (int)left->length, j = 0; i < left->length + right->length; i++, j++) {
     new_string->chars[i] = right->chars[j];
     hash ^= (u32)new_string->chars[i];
     hash *= 16777619;
@@ -191,11 +195,15 @@ static inline void concatenate() {
   new_string->chars[new_string->length] = 0;
   new_string->hash = hash;
   // Check if we have an already existing string in the string intern so we reuse its memory address
-  ObjectString* intern_string = table_find_string(&vm.strings, new_string->chars, (u32) new_string->length, hash);
+  ObjectString* intern_string = table_find_string(&vm.strings, new_string->chars, (u32)new_string->length, hash);
   if (intern_string != NULL) {
-    FREE_ARRAY(char, new_string, new_string->length + 1);
+    pop();
+    // Let the garbage collector do its thing
+    // FREE_ARRAY(char, new_string, new_string->length + 1);
     new_string = intern_string;
   }
+  pop();
+  pop();
   push(OBJECT_VAL(new_string));
 }
 
@@ -325,7 +333,7 @@ static InterpretResult run() {
     }
     vm.stack_top = frame->slots;
     push(result);
-//    frame = &vm.frames[vm.frame_count - 1];
+    //    frame = &vm.frames[vm.frame_count - 1];
     return INTERPRET_OK;
   }
 
@@ -582,6 +590,7 @@ static InterpretResult run() {
     Value constant = READ_CONSTANT_LONG();
     ObjectFunction* function = (ObjectFunction*)constant.as.object;
     ObjectClosure* closure = new_closure(function);
+    push(OBJECT_VAL(closure));
 #ifdef DEBUG_TRACE_EXECUTION
     printf("[OP_CLOSURE] Capturing upvalues: %d\n", closure->upvalue_count);
 #endif
@@ -599,7 +608,6 @@ static InterpretResult run() {
         closure->upvalues[i] = frame->function->upvalues[index];
       }
     }
-    push(OBJECT_VAL(closure));
     continue;
   }
   }
@@ -635,6 +643,5 @@ InterpretResult interpret_source(const char* source) {
   InterpretResult ok = run();
   free_vm();
   free_value_array(obj->global_array);
-  free(obj->global_array);
   return ok;
 }

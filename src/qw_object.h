@@ -7,6 +7,7 @@
 #include "qw_values.h"
 
 struct Object {
+  bool is_marked;
   ObjectType type;
   struct Object* next;
 };

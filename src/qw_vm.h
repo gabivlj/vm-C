@@ -21,6 +21,12 @@ typedef struct {
 #define STACK_MAX (FRAMES_MAX * 256)
 
 typedef struct {
+  u32 count;
+  u32 capacity;
+  Object** stack;
+} Stack;
+
+typedef struct {
   CallFrame frames[FRAMES_MAX];
 
   i32 frame_count;
@@ -50,6 +56,8 @@ typedef struct {
   /// store them in the heap
   ObjectUpvalue* open_upvalues;
 
+  /// GARBAGE COLLECTOR: The current stack of object greys which we are processing
+  Stack gray_stack_gc;
 } VM;
 
 typedef enum { INTERPRET_OK, INTERPRET_COMPILER_ERROR, INTERPRET_RUNTIME_ERROR } InterpretResult;

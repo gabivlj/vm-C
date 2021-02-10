@@ -5,9 +5,13 @@
 #include "qw_vm.h"
 
 Object* allocate_object(ObjectType type, isize true_size) {
-  Object* object = (Object*)reallocate(NULL, 0, true_size);
+  Object* object = ALLOCATE(Object, true_size);
+#ifdef DEBUG_LOG_GC
+  printf("%p allocate %ld for %d\n", object, true_size, type);
+#endif
   object->type = type;
   object->next = vm.objects;
+  object->is_marked = false;
   vm.objects = object;
   return object;
 }
@@ -42,7 +46,9 @@ ObjectString* copy_string(u32 length, const char* start) {
   }
   string->chars[length] = 0;
   string->hash = hash;
+  push(OBJECT_VAL(string));
   table_set(&vm.strings, string, NIL_VAL);
+  pop();
   return string;
 }
 
@@ -78,7 +84,7 @@ void print_object(Value value) {
       break;
     }
     default: {
-      printf("COULDN'T PRINT OBJECT OF TYPE: %d\n", value.as.object->type);
+      printf("[print_object WARNING] COULDN'T PRINT OBJECT OF TYPE: %d\n", value.as.object->type);
       return;
     }
   }
@@ -112,9 +118,12 @@ ObjectNative* new_native_function(NativeFn callback) {
 }
 
 ObjectClosure* new_closure(ObjectFunction* function) {
+  ObjectUpvalue** upvalues = ALLOCATE(ObjectUpvalue*, function->upvalue_count);
   ObjectClosure* closure = ALLOCATE_OBJECT(ObjectClosure, OBJECT_CLOSURE);
   closure->function = function;
-  ObjectUpvalue** upvalues = ALLOCATE(ObjectUpvalue*, function->upvalue_count);
+  closure->upvalues = NULL;
+  closure->upvalue_count = 0;
+  closure->upvalues = upvalues;
   for (u32 i = 0; i < function->upvalue_count; ++i) {
     upvalues[i] = NULL;
   }

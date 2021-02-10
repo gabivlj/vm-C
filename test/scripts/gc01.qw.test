@@ -1,0 +1,8 @@
+
+{
+var x = "cool";
+x = x + " thing";
+}
+
+print "Has anybody done this!?" + "!";
+print "Has anybody done this!??>??";

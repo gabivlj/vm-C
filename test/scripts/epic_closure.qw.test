@@ -1,0 +1,28 @@
+fun a() {
+  var x = "world";
+  fun b() {
+    fun c() {
+      fun d() {
+        fun s() {
+          var q = "hello ";
+          fun p() {
+            return q + x;
+          }
+          return p;
+        }
+        return s;  
+      }
+      return d;
+    }
+    return c;
+  }
+  fun ola() {
+    fun ola2() {
+      return b()()()()();
+    }
+    return ola2;
+  }
+  return ola()();
+}
+
+assert a() == "hello world";
