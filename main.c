@@ -58,10 +58,12 @@ static void run_file(const char* path) {
 }
 
 int main(int argc, const char* argv[]) {
-  run_file("./examples/fib.qw");
-//  run_file("./examples/fib.qw");
-//  run_file("./examples/fib.qw");
-//    run_file("./examples/fib.qw");
-//    run_file("./examples/fib.qw");
-//    run_file("./examples/fib.qw");
+    for (int i = 0; i < 1; i++) {
+        run_file("./examples/fib.qw");
+//        run_file("./examples/fib.qw");
+//        run_file("./examples/fib.qw");
+//        run_file("./examples/fib.qw");
+//        run_file("./examples/fib.qw");
+//        run_file("./examples/fib.qw");
+    }
 }

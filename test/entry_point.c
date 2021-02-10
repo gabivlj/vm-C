@@ -211,7 +211,7 @@ TEST test_lines(void) {
 }
 
 TEST test_file_compilations() {
-  const u32 number_of_scripts = 3;  // 26 * 4;
+  const u32 number_of_scripts = 1;  // 26 * 4;
   const char* scripts[] = {
       "./scripts/epic_closure.qw.test", "./scripts/closure.qw.test", "./scripts/vec.qw.test",
       "./scripts/vec.qw.test",          "./scripts/fib.qw.test",     "./scripts/vec.qw.test",

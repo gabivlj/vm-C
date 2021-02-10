@@ -38,6 +38,7 @@ void init_vm() {
   vm.gray_stack_gc.capacity = 0;
   vm.gray_stack_gc.stack = NULL;
   vm.open_upvalues = NULL;
+  vm.globals.values = NULL;
   init_table(&vm.strings);
 }
 
@@ -197,11 +198,12 @@ static inline void concatenate() {
   // Check if we have an already existing string in the string intern so we reuse its memory address
   ObjectString* intern_string = table_find_string(&vm.strings, new_string->chars, (u32)new_string->length, hash);
   if (intern_string != NULL) {
-    pop();
+    // pop();
     // Let the garbage collector do its thing
     // FREE_ARRAY(char, new_string, new_string->length + 1);
     new_string = intern_string;
   }
+  pop();
   pop();
   pop();
   push(OBJECT_VAL(new_string));
@@ -323,9 +325,6 @@ static InterpretResult run() {
 
   do_op_return : {
     Value result = pop();
-    // Copy all of the open values to their upvalues.
-    close_upvalues(frame->slots);
-    vm.frame_count--;
     if (vm.frame_count == 0) {
       // Pop the frame
       pop();
@@ -333,6 +332,10 @@ static InterpretResult run() {
     }
     vm.stack_top = frame->slots;
     push(result);
+    // Copy all of the open values to their upvalues.
+    close_upvalues(frame->slots);
+    vm.frame_count--;
+
     //    frame = &vm.frames[vm.frame_count - 1];
     return INTERPRET_OK;
   }
@@ -588,6 +591,7 @@ static InterpretResult run() {
   // to a closure (Captures all of the variables)
   do_op_closure : {
     Value constant = READ_CONSTANT_LONG();
+
     ObjectFunction* function = (ObjectFunction*)constant.as.object;
     ObjectClosure* closure = new_closure(function);
     push(OBJECT_VAL(closure));
