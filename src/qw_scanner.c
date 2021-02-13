@@ -220,6 +220,10 @@ Token scan_token() {
   }
   // printf("%c \n", current_character);
   switch (current_character) {
+    case '[':
+      return make_token(TOKEN_LEFT_BRACKET);
+    case ']':
+      return make_token(TOKEN_RIGHT_BRACKET);
     case '?':
       return make_token(TOKEN_QUESTION);
     case ':':

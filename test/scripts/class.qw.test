@@ -1,0 +1,47 @@
+
+class Thing {}
+print Thing;
+
+fun exists(value) {
+	if value and value != 0 {
+		return !0;
+	}
+	return !!0;
+}
+
+{
+	class Thing2 {}
+	print Thing2;
+	var t = Thing2();
+	print t;
+	t.thing = 3;
+	print t.thing;
+	when !!t.t {
+		!!1 -> {
+			print "exists";
+		}
+		nothing -> {
+			print "doesn't exist";
+		}
+	}
+	if exists(t.thing) {
+		print "Thing exists";
+	} else {
+		print "Thing does not exist";
+	}
+	var x = 3;
+	assert x == 3;
+}
+
+{
+	var another_thing = 4;
+	assert another_thing == 4;
+
+}
+
+
+print (Thing().kool = 5);
+
+var thing = Thing();
+thing[("key")] = 3;
+assert thing["key"] == 3;

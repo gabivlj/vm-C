@@ -33,6 +33,8 @@ Value pop() {
 //{ var x = 3; { var z = 2; z = 2; } var c = 3; c = 4; print c; }
 void init_vm() {
   reset_stack();
+  vm.bytes_allocated = 0;
+  vm.next_gc = 1024 * 1024;
   vm.objects = NULL;
   vm.gray_stack_gc.count = 0;
   vm.gray_stack_gc.capacity = 0;
@@ -125,6 +127,11 @@ static bool call_value(Value function_stack_pointer_start, u8 arg_count) {
   }
 
   switch (obj->type) {
+    case OBJECT_CLASS: {
+      ObjectClass* class = AS_CLASS(function_stack_pointer_start);
+      vm.stack_top[-arg_count - 1] = OBJECT_VAL(new_instance(class));
+      return true;
+    }
     case OBJECT_CLOSURE: {
       ObjectClosure* closure = (ObjectClosure*)obj;
       if (closure->function->number_of_parameters != arg_count) {
@@ -230,14 +237,43 @@ static InterpretResult run() {
 
 #define READ_STRING() (AS_STRING(READ_CONSTANT_LONG()))
 
-  static void* dispatch_table[] = {
-      &&do_op_return,      &&do_op_constant,     &&do_op_constant_long, &&do_op_negate,     &&do_op_add,
-      &&do_op_substract,   &&do_op_multiply,     &&do_op_divide,        &&do_op_nil,        &&do_op_true,
-      &&do_op_false,       &&do_op_bang,         &&do_op_equal,         &&do_op_greater,    &&do_op_less,
-      &&do_op_print,       &&do_op_pop,          &&do_op_define_global, &&do_op_get_global, &&do_op_set_global,
-      &&do_op_get_local,   &&do_op_set_local,    &&do_op_jump_if_false, &&do_op_jump,       &&do_op_jump_back,
-      &&do_push_again,     &&do_op_assert,       &&do_op_call,          &&do_op_closure,    &&do_op_get_upvalue,
-      &&do_op_set_upvalue, &&do_op_close_upvalue};
+  static void* dispatch_table[] = {&&do_op_return,
+                                   &&do_op_constant,
+                                   &&do_op_constant_long,
+                                   &&do_op_negate,
+                                   &&do_op_add,
+                                   &&do_op_substract,
+                                   &&do_op_multiply,
+                                   &&do_op_divide,
+                                   &&do_op_nil,
+                                   &&do_op_true,
+                                   &&do_op_false,
+                                   &&do_op_bang,
+                                   &&do_op_equal,
+                                   &&do_op_greater,
+                                   &&do_op_less,
+                                   &&do_op_print,
+                                   &&do_op_pop,
+                                   &&do_op_define_global,
+                                   &&do_op_get_global,
+                                   &&do_op_set_global,
+                                   &&do_op_get_local,
+                                   &&do_op_set_local,
+                                   &&do_op_jump_if_false,
+                                   &&do_op_jump,
+                                   &&do_op_jump_back,
+                                   &&do_push_again,
+                                   &&do_op_assert,
+                                   &&do_op_call,
+                                   &&do_op_closure,
+                                   &&do_op_get_upvalue,
+                                   &&do_op_set_upvalue,
+                                   &&do_op_close_upvalue,
+                                   &&do_op_class,
+                                   &&do_op_set_property,
+                                   &&do_op_get_property,
+                                   &&do_op_set_property_top_stack,
+                                   &&do_op_get_property_top_stack};
 
 /// BinaryOp does a binary operation on the vm
 #define BINARY_OP(value_type, _op_)                                                                  \
@@ -313,6 +349,91 @@ static InterpretResult run() {
 
     // Goto current opcode handler
     DISPATCH();
+  do_op_set_property_top_stack : {
+    //
+    Value instance = PEEK_STACK(2);
+    if (!IS_INSTANCE(instance)) {
+      runtime_error("cannot access property on a non instance value: ");
+      print_value(PEEK_STACK(2));
+      return INTERPRET_RUNTIME_ERROR;
+    }
+    Value key = PEEK_STACK(1);
+    if (!IS_STRING(key)) {
+      runtime_error("cannot access property with a non string key: ");
+      print_value(PEEK_STACK(1));
+      return INTERPRET_RUNTIME_ERROR;
+    }
+    Value value = PEEK_STACK(0);
+    table_set(&AS_INSTANCE(instance)->fields, AS_STRING(key), value);
+    pop();
+    pop();
+    pop();
+    push(value);
+    continue;
+  }
+
+  do_op_get_property_top_stack : {
+    //
+    Value instance = PEEK_STACK(1);
+    if (!IS_INSTANCE(instance)) {
+      runtime_error("cannot access property on a non instance value: ");
+      print_value(PEEK_STACK(1));
+      return INTERPRET_RUNTIME_ERROR;
+    }
+    Value key = PEEK_STACK(0);
+    if (!IS_STRING(key)) {
+      runtime_error("cannot access property with a non string key: ");
+      print_value(PEEK_STACK(0));
+      return INTERPRET_RUNTIME_ERROR;
+    }
+    ObjectInstance* instance_obj = AS_INSTANCE(instance);
+    Value value;
+    if (!table_get(&instance_obj->fields, AS_STRING(key), &value)) {
+      value = NIL_VAL;
+    }
+    pop();
+    pop();
+    push(value);
+    continue;
+  }
+
+  do_op_get_property : {
+    if (!IS_INSTANCE(PEEK_STACK(0))) {
+      runtime_error("cannot access property on a non instance value: ");
+      print_value(PEEK_STACK(0));
+      return INTERPRET_RUNTIME_ERROR;
+    }
+    ObjectInstance* instance = AS_INSTANCE(PEEK_STACK(0));
+    ObjectString* name = AS_STRING(READ_CONSTANT_LONG());
+    Value v;
+    if (table_get(&instance->fields, name, &v)) {
+      // Pop instance
+      pop();
+      // Push the property value
+      push(v);
+      continue;
+    }
+    pop();
+    push(NIL_VAL);
+    continue;
+  }
+  do_op_set_property : {
+    //
+    ObjectInstance* instance = AS_INSTANCE(PEEK_STACK(1));
+    Value set = PEEK_STACK(0);
+    ObjectString* name = AS_STRING(READ_CONSTANT_LONG());
+    table_set(&instance->fields, name, set);
+    pop();
+    pop();
+    push(set);
+    continue;
+  }
+  do_op_class : {
+    u16 index = (READ_BYTE() << 8) | READ_BYTE();
+    ObjectString* str = (ObjectString*)frame->function->function->chunk.constants.values[index].as.object;
+    push(OBJECT_VAL(new_class(str)));
+    continue;
+  }
 
   do_op_call : {
     u8 arg_count = READ_BYTE();
@@ -320,11 +441,13 @@ static InterpretResult run() {
       return INTERPRET_RUNTIME_ERROR;
     }
     if (run() == INTERPRET_RUNTIME_ERROR) return INTERPRET_RUNTIME_ERROR;
+    if (vm.frame_count == 0) return INTERPRET_OK;
     continue;
   }
 
   do_op_return : {
     Value result = pop();
+    vm.frame_count--;
     if (vm.frame_count == 0) {
       // Pop the frame
       pop();
@@ -334,7 +457,6 @@ static InterpretResult run() {
     push(result);
     // Copy all of the open values to their upvalues.
     close_upvalues(frame->slots);
-    vm.frame_count--;
 
     //    frame = &vm.frames[vm.frame_count - 1];
     return INTERPRET_OK;
@@ -470,9 +592,15 @@ static InterpretResult run() {
 
   do_op_bang : {
     Value* top = &PEEK_STACK(0);
-
-    top->as.boolean = top->type == VAL_NIL || (top->type == VAL_BOOL && !top->as.boolean) ||
-                      (top->type == VAL_NUMBER && top->as.number > 0.000001 && !(top->as.number = 0));
+    if (top->type == VAL_NIL) {
+      top->as.boolean = true;
+    } else if (top->type == VAL_BOOL) {
+      top->as.boolean = !top->as.boolean;
+    } else if (top->type == VAL_NUMBER) {
+      top->as.boolean = top->as.number <= 0.0001;
+    } else {
+      top->as.boolean = false;
+    }
     top->type = VAL_BOOL;
     continue;
   }

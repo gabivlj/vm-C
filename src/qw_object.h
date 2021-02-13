@@ -4,6 +4,7 @@
 #include "memory.h"
 #include "qw_chunk.h"
 #include "qw_common.h"
+#include "qw_table.h"
 #include "qw_values.h"
 
 struct Object {
@@ -35,6 +36,17 @@ struct ObjectString {
   char chars[];
 };
 
+typedef struct ObjectClass {
+  Object object;
+  ObjectString* name;
+} ObjectClass;
+
+typedef struct ObjectInstance {
+  Object object;
+  ObjectClass* klass;
+  Table fields;
+} ObjectInstance;
+
 typedef struct {
   Object object;
   u32 number_of_parameters;
@@ -64,7 +76,11 @@ void print_object(Value value);
 // String utilities
 #define IS_STRING(value) (is_object_type(value, OBJECT_STRING))
 #define AS_STRING(value) ((ObjectString*)AS_OBJECT(value))
+#define AS_CLASS(value) ((ObjectClass*)AS_OBJECT(value))
+#define IS_CLASS(value) (is_object_type(value, OBJECT_CLASS))
 #define AS_CSTRING(value) (((ObjectString*)AS_OBJECT(value))->chars)
+#define IS_INSTANCE(value) (is_object_type(value, OBJECT_INSTANCE))
+#define AS_INSTANCE(value) ((ObjectInstance*)AS_OBJECT(value))
 
 ObjectString* allocate_string(u32 length, u32 hash);
 Object* allocate_object(ObjectType type, isize true_size);
@@ -74,6 +90,8 @@ ObjectFunction* new_function(void);
 ObjectUpvalue* new_upvalue(Value* slot);
 ObjectNative* new_native_function(NativeFn callback);
 ObjectString* copy_string(u32 length, const char* start);
+ObjectClass* new_class(ObjectString* name);
+ObjectInstance* new_instance(ObjectClass* klass);
 u32 hash_string(char* str, u32 length);
 bool is_truthy(Value* obj);
 

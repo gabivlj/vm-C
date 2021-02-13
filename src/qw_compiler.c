@@ -30,6 +30,9 @@ static void variable(bool);
 static void and_op(bool);
 static void call(bool);
 static void or_op(bool);
+static void dot(bool);
+// instance->"key", instance->defined_variable_as_key, instance->0
+static void index_access(bool);
 static void add_native_function(const char* name, NativeFn function);
 static i32 add_variable_to_global_symbols(Token* name, bool mutable, bool can_assign);
 ParseRule rules[] = {
@@ -38,7 +41,7 @@ ParseRule rules[] = {
     [TOKEN_LEFT_BRACE] = {NULL, NULL, PREC_NONE},
     [TOKEN_RIGHT_BRACE] = {NULL, NULL, PREC_NONE},
     [TOKEN_COMMA] = {NULL, NULL, PREC_NONE},
-    [TOKEN_DOT] = {NULL, NULL, PREC_NONE},
+    [TOKEN_DOT] = {NULL, dot, PREC_CALL},
     [TOKEN_MINUS] = {unary, binary, PREC_TERM},
     [TOKEN_PLUS] = {NULL, binary, PREC_TERM},
     [TOKEN_SEMICOLON] = {NULL, NULL, PREC_NONE},
@@ -77,6 +80,8 @@ ParseRule rules[] = {
     [TOKEN_EOF] = {NULL, NULL, PREC_NONE},
     [TOKEN_DOUBLE_POINT] = {NULL, NULL, PREC_NONE},
     [TOKEN_MINUS_ARROW] = {NULL, NULL, PREC_NONE},
+    [TOKEN_LEFT_BRACKET] = {NULL, index_access, PREC_CALL},
+    [TOKEN_RIGHT_BRACKET] = {NULL, NULL, PREC_NONE},
     [TOKEN_NOTHING] = {NULL, NULL, PREC_NONE},
 };
 
@@ -135,7 +140,7 @@ static void init_compiler(Compiler* compiler_parameter, FunctionType type) {
   local->is_captured = false;
   if (compiler_parameter->enclosing_compiler == NULL) {
     if (symbol_table.capacity != 0) {
-//      free_table(&symbol_table);
+      //      free_table(&symbol_table);
     }
     init_table(&symbol_table);
     //    add_native_function("clock", clock_native);
@@ -549,6 +554,28 @@ static void grouping(bool _) {
   assert_current_and_advance(TOKEN_RIGHT_PAREN, "Expected ')' after expression.");
 }
 
+static void index_access(bool assignable) {
+  parse_precedence(PREC_ASSIGNMENT + 1);
+  assert_current_and_advance(TOKEN_RIGHT_BRACKET, "Expected ] after index access");
+  if (assignable && match(TOKEN_EQUAL)) {
+    expression();
+    emit_byte(OP_SET_PROPERTY_TOP_STACK);
+  } else {
+    emit_byte(OP_GET_PROPERTY_TOP_STACK);
+  }
+}
+
+static void dot(bool assignable) {
+  assert_current_and_advance(TOKEN_IDENTIFIER, "Expected identifier after .");
+  u16 name = make_constant(OBJECT_VAL(copy_string(parser.previous.length, parser.previous.start)));
+  if (assignable && match(TOKEN_EQUAL)) {
+    expression();
+    emit_op_u16(OP_SET_PROPERTY, name);
+  } else {
+    emit_op_u16(OP_GET_PROPERTY, name);
+  }
+}
+
 static void binary(bool _) {
   TokenType operator_type = parser.previous.type;
   ParseRule* rule = get_rule(operator_type);
@@ -943,8 +970,31 @@ static void fun_declaration(void) {
   define_variable(global);
 }
 
+static void class_declaration() {
+  // Identifier
+  Token* name = &parser.previous;
+
+  // Allocate local/global variable
+  // If local: It's cool because we got it in the stack and OP_CLASS will push class constructor into stack
+  // If global: We reserve a space in global symbol_table and then in define_variable we will emit
+  //            OP_DEFINE_GLOBAL which will take the top element of the stack (just pushed by OP_CLASS)
+  u16 name_constant = parse_variable("Expected identifier", true);
+
+  // Make the constant (ObjectString*) which the OP_CLASS will use
+  u16 constant_name = make_constant(OBJECT_VAL(copy_string(name->length, name->start)));
+  emit_op_u16(OP_CLASS, constant_name);
+
+  // As we said, declare global, if it's local make it usable
+  define_variable(name_constant);
+
+  assert_current_and_advance(TOKEN_LEFT_BRACE, "expected '{'");
+  assert_current_and_advance(TOKEN_RIGHT_BRACE, "expected '}'");
+}
+
 static void statement(bool _) {
-  if (match(TOKEN_RETURN)) {
+  if (match(TOKEN_CLASS)) {
+    class_declaration();
+  } else if (match(TOKEN_RETURN)) {
 #ifdef DONT_ALLOW_RETURNS_IN_TOP_LEVEL
     if (current->function_type == TYPE_SCRIPT) {
       error_at_previous("Can't return at top level");

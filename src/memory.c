@@ -6,7 +6,7 @@
 #include "qw_compiler.h"
 #include "qw_object.h"
 #include "qw_vm.h"
-
+#define GC_HEAP_GROW_FACTOR 2
 #ifdef DEBUG_LOG_GC
 #include <stdio.h>
 
@@ -14,11 +14,15 @@
 #endif
 
 void* reallocate(void* pointer, isize old_size, isize new_size) {
+  vm.bytes_allocated += new_size - old_size;
   // only when we allocate
   if (new_size > old_size) {
 #ifdef DEBUG_STRESS_GC
     collect_garbage();
 #endif
+  }
+  if (vm.bytes_allocated > vm.next_gc) {
+    collect_garbage();
   }
   if (new_size == 0) {
     free(pointer);
@@ -34,9 +38,19 @@ static void free_object(Object* object) {
   printf("%p free type %d\n", (void*)object, object->type);
 #endif
   switch (object->type) {
+    case OBJECT_INSTANCE: {
+      ObjectInstance* instance = (ObjectInstance*)object;
+      free_table(&instance->fields);
+      FREE(ObjectInstance, object);
+      break;
+    }
+    case OBJECT_CLASS: {
+      FREE(ObjectClass, object);
+      break;
+    }
     case OBJECT_STRING: {
       ObjectString* string = (ObjectString*)object;
-      FREE(ObjectString, object);
+      reallocate(string, sizeof(ObjectString) + sizeof(char) * (string->length + 1), 0);
       break;
     }
     case OBJECT_UPVALUE: {
@@ -71,12 +85,14 @@ void free_objects() {
   while (object != NULL) {
     Object* curr = object;
     object = object->next;
+    curr->next = NULL;
     free_object(curr);
   }
   if (vm.gray_stack_gc.capacity != 0) {
     free(vm.gray_stack_gc.stack);
     vm.gray_stack_gc.capacity = 0;
   }
+  // printf("capacity: %zu\n", vm.bytes_allocated);
   vm.objects = NULL;
 }
 
@@ -143,6 +159,16 @@ static void blackend_object(Object* object) {
   printf("\n");
 #endif
   switch (object->type) {
+    case OBJECT_INSTANCE: {
+      ObjectInstance* instance = (ObjectInstance*)object;
+      mark_table(&instance->fields);
+      mark_object((Object*)instance->klass);
+      break;
+    }
+    case OBJECT_CLASS: {
+      mark_object((Object*)((ObjectClass*)object)->name);
+      break;
+    }
     case OBJECT_CLOSURE: {
       ObjectClosure* closure = (ObjectClosure*)object;
       mark_object((Object*)closure->function);
@@ -159,7 +185,7 @@ static void blackend_object(Object* object) {
       mark_object((Object*)function);
       mark_object((Object*)function->name);
       mark_array(&function->chunk.constants);
-      printf(">> constants of func %p\n", (void*)object);
+      // printf(">> constants of func %p\n", (void*)object);
       break;
     }
 
@@ -231,12 +257,19 @@ void table_remove_white(Table* table) {
 void collect_garbage() {
 #ifdef DEBUG_LOG_GC
   printf("-- gc begin\n");
+  isize before = vm.bytes_allocated;
 #endif
+  isize before = vm.bytes_allocated;
   mark_roots();
   trace_references();
   table_remove_white(&vm.strings);
+  vm.next_gc = vm.bytes_allocated + 1024 * 1024 * 1024;
   sweep();
+  printf("collected %ld bytes (from %ld to %ld) next at %ld\n", before - vm.bytes_allocated, before, vm.bytes_allocated,
+         vm.next_gc);
 #ifdef DEBUG_LOG_GC
+  printf("collected %ld bytes (from %ld to %ld) next at %ld", before - vm.bytes_allocated, before, vm.bytes_allocated,
+         vm.next_gc);
   printf("-- gc end\n");
 #endif
 }

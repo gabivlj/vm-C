@@ -58,6 +58,13 @@ typedef struct {
 
   /// GARBAGE COLLECTOR: The current stack of object greys which we are processing
   Stack gray_stack_gc;
+
+  /// GARBAGE COLLECTOR: Bytes allocated keeps track on the number of bytes allocated by the GC so we can make a good
+  /// throughput of the system
+  isize bytes_allocated;
+
+  /// GARBAGE COLLECTOR: Next GC means what is the size needed for the next garbage collection
+  isize next_gc;
 } VM;
 
 typedef enum { INTERPRET_OK, INTERPRET_COMPILER_ERROR, INTERPRET_RUNTIME_ERROR } InterpretResult;

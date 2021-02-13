@@ -62,6 +62,16 @@ static void print_function(ObjectFunction* fn) {
 
 void print_object(Value value) {
   switch (OBJECT_TYPE(value)) {
+    case OBJECT_INSTANCE: {
+      ObjectInstance* instance = AS_INSTANCE(value);
+      printf("<%s instance %p>", instance->klass->name->chars, instance);
+      break;
+    }
+    case OBJECT_CLASS: {
+      ObjectClass* klass = AS_CLASS(value);
+      printf("<constructor %s %p>", klass->name->chars, value.as.object);
+      break;
+    }
     case OBJECT_CLOSURE: {
       printf("!CLOSURE ");
       print_function(((ObjectClosure*)value.as.object)->function);
@@ -138,4 +148,17 @@ ObjectUpvalue* new_upvalue(Value* slot) {
   upvalue->closed = NIL_VAL;
   upvalue->next = NULL;
   return upvalue;
+}
+
+ObjectClass* new_class(ObjectString* name) {
+  ObjectClass* klass = ALLOCATE_OBJECT(ObjectClass, OBJECT_CLASS);
+  klass->name = name;
+  return klass;
+}
+
+ObjectInstance* new_instance(ObjectClass* klass) {
+  ObjectInstance* instance = ALLOCATE_OBJECT(ObjectInstance, OBJECT_INSTANCE);
+  instance->klass = klass;
+  init_table(&instance->fields);
+  return instance;
 }

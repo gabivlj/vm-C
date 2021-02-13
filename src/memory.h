@@ -15,6 +15,7 @@ void mark_array(ValueArray*);
 void mark_table(Table* table);
 void table_remove_white(Table* table);
 
+
 void collect_garbage();
 
 #define ALLOCATE(type, length) (type*)reallocate(NULL, 0, sizeof(type) * (length))

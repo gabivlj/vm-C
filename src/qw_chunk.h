@@ -46,7 +46,14 @@ typedef enum {
   OP_CLOSURE,
   OP_GET_UPVALUE,
   OP_SET_UPVALUE,
-  OP_CLOSE_UPVALUE
+  OP_CLOSE_UPVALUE,
+  OP_CLASS,
+  OP_SET_PROPERTY,
+  OP_GET_PROPERTY,
+  // instead of getting the property name from the constants table, gets it from the
+  // top of the stack for dynamic keys TODO:
+  OP_SET_PROPERTY_TOP_STACK,
+  OP_GET_PROPERTY_TOP_STACK,
 } OpCode;
 
 /// Chunk is a sequence of bytecode

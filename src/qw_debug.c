@@ -156,6 +156,21 @@ u32 dissasemble_instruction(Chunk* chunk, u32 offset) {
     case OP_CLOSE_UPVALUE: {
       return simple_instruction("OP_CLOSE_UPVALUE", offset);
     }
+    case OP_SET_PROPERTY_TOP_STACK: {
+      return simple_instruction("OP_SET_PROPERTY_TOP_STACK", offset);
+    }
+    case OP_GET_PROPERTY_TOP_STACK: {
+      return simple_instruction("OP_GET_PROPERTY_TOP_STACK", offset);
+    }
+    case OP_GET_PROPERTY: {
+      return constant_instruction_long("OP_GET_PROPERTY", chunk, offset);
+    }
+    case OP_SET_PROPERTY: {
+      return constant_instruction_long("OP_SET_PROPERTY", chunk, offset);
+    }
+    case OP_CLASS: {
+      return constant_instruction_long("OP_CLASS", chunk, offset);
+    }
     case OP_CLOSURE: {
       // TODO: PRINT CLOSURE : (
 
