@@ -31,6 +31,7 @@ static void and_op(bool);
 static void call(bool);
 static void or_op(bool);
 static void dot(bool);
+static void this_keyword(bool);
 // instance->"key", instance->defined_variable_as_key, instance->0
 static void index_access(bool);
 static void add_native_function(const char* name, NativeFn function);
@@ -70,7 +71,7 @@ ParseRule rules[] = {
     [TOKEN_PRINT] = {NULL, NULL, PREC_NONE},
     [TOKEN_RETURN] = {NULL, NULL, PREC_NONE},
     [TOKEN_SUPER] = {NULL, NULL, PREC_NONE},
-    [TOKEN_THIS] = {NULL, NULL, PREC_NONE},
+    [TOKEN_THIS] = {this_keyword, NULL, PREC_NONE},
     [TOKEN_TRUE] = {literal, NULL, PREC_NONE},
     [TOKEN_VAR] = {NULL, NULL, PREC_NONE},
     [TOKEN_WHILE] = {NULL, NULL, PREC_NONE},
@@ -93,6 +94,13 @@ typedef struct {
   u8 had_error;
   u8 panic_mode;
 } Parser;
+
+typedef struct ClassCompiler {
+  struct ClassCompiler* enclosing;
+  Token name;
+} ClassCompiler;
+
+ClassCompiler* current_class = NULL;
 
 Parser parser;
 
@@ -134,10 +142,18 @@ static void init_compiler(Compiler* compiler_parameter, FunctionType type) {
   }
 
   Local* local = &current->locals[current->local_count++];
-  local->depth = 0;
-  local->name.start = "";
-  local->name.length = 0;
-  local->is_captured = false;
+  // Allocate first local to the this keyword
+  if (type == TYPE_METHOD || type == TYPE_INITIALIZER) {
+    local->name.start = "this";
+    local->name.length = 4;
+    local->depth = compiler_parameter->scope_depth;
+    local->is_captured = false;
+  } else {  // else just init to 0 because in the stack it will only be stored the closure
+    local->depth = 0;
+    local->name.start = "";
+    local->name.length = 0;
+    local->is_captured = false;
+  }
   if (compiler_parameter->enclosing_compiler == NULL) {
     if (symbol_table.capacity != 0) {
       //      free_table(&symbol_table);
@@ -169,7 +185,12 @@ static inline void emit_op_u32(u8 op, u32 value) {
 }
 // static inline void emit_op_u32(u8 op, u32 value) { emit_u((op << 24) | value); }
 static inline void emit_empty_return() {
-  emit_byte(OP_NIL);
+  if (current->function_type == TYPE_INITIALIZER) {
+    // Return the instance (first in the stack)
+    emit_op_u16(OP_GET_LOCAL, 0);
+  } else {
+    emit_byte(OP_NIL);
+  }
   emit_byte(OP_RETURN);
 }
 
@@ -331,7 +352,7 @@ static void named_variable(Token name, bool can_assign) {
 
 /// This is a function that parses a <variable> = <expression>
 static void variable(bool can_assign) {
-  if (parser.previous.type == TOKEN_IDENTIFIER) {
+  if (parser.previous.type == TOKEN_IDENTIFIER || parser.previous.type == TOKEN_THIS) {
     named_variable(parser.previous, can_assign);
   } else {
     error_at_previous("Expected named variable for assignment");
@@ -565,17 +586,6 @@ static void index_access(bool assignable) {
   }
 }
 
-static void dot(bool assignable) {
-  assert_current_and_advance(TOKEN_IDENTIFIER, "Expected identifier after .");
-  u16 name = make_constant(OBJECT_VAL(copy_string(parser.previous.length, parser.previous.start)));
-  if (assignable && match(TOKEN_EQUAL)) {
-    expression();
-    emit_op_u16(OP_SET_PROPERTY, name);
-  } else {
-    emit_op_u16(OP_GET_PROPERTY, name);
-  }
-}
-
 static void binary(bool _) {
   TokenType operator_type = parser.previous.type;
   ParseRule* rule = get_rule(operator_type);
@@ -774,6 +784,23 @@ static void call(bool can_assign) {
   emit_op_u8(OP_CALL, arg_list);
 }
 
+
+static void dot(bool assignable) {
+  assert_current_and_advance(TOKEN_IDENTIFIER, "Expected identifier after .");
+  u16 name = make_constant(OBJECT_VAL(copy_string(parser.previous.length, parser.previous.start)));
+  if (assignable && match(TOKEN_EQUAL)) {
+    expression();
+    emit_op_u16(OP_SET_PROPERTY, name);
+  } else if (match(TOKEN_LEFT_PAREN)) {
+    u8 arg_count = argument_list();
+    emit_op_u16(OP_INVOKE, name);
+    emit_byte(arg_count);
+  } else {
+    emit_op_u16(OP_GET_PROPERTY, name);
+  }
+}
+
+
 static void while_statement() {
 #if USE_PARENS_FOR_STATEMENT_CONDITIONS
   assert_current_and_advance(TOKEN_LEFT_PAREN, "Expected '(' before condition");
@@ -970,6 +997,27 @@ static void fun_declaration(void) {
   define_variable(global);
 }
 
+static void method() {
+  assert_current_and_advance(TOKEN_IDENTIFIER, "Expected a method name.");
+  Token* name = &parser.previous;
+  u16 constant = make_constant(OBJECT_VAL(copy_string(name->length, name->start)));
+  FunctionType type = TYPE_METHOD;
+  if (parser.previous.length == 4 && memcmp(name->start, "init", 4) == 0) {
+    // Means that is a constructor and that we should return an instance
+    type = TYPE_INITIALIZER;
+  }
+  parse_function(type);
+  emit_op_u16(OP_METHOD, constant);
+}
+
+static void this_keyword(bool _) {
+  if (current_class == NULL) {
+    error_at_current("can't use this here!");
+    return;
+  }
+  variable(false);
+}
+
 static void class_declaration() {
   // Identifier
   Token* name = &parser.previous;
@@ -982,13 +1030,34 @@ static void class_declaration() {
 
   // Make the constant (ObjectString*) which the OP_CLASS will use
   u16 constant_name = make_constant(OBJECT_VAL(copy_string(name->length, name->start)));
+
+  // This operation is for getting the name and pushing the class into the stack
   emit_op_u16(OP_CLASS, constant_name);
 
   // As we said, declare global, if it's local make it usable
   define_variable(name_constant);
 
+  // declare current compilation of class
+  ClassCompiler compiler_class;
+  compiler_class.enclosing = current_class;
+  compiler_class.name = *name;
+  current_class = &compiler_class;
+
+  // load the class constructor in the stack (Because we want the method to get the class from the stack)
+  named_variable(*name, false);
+
   assert_current_and_advance(TOKEN_LEFT_BRACE, "expected '{'");
+
+  while (!check(TOKEN_RIGHT_BRACE) && !check(TOKEN_EOF)) {
+    method();
+  }
+
   assert_current_and_advance(TOKEN_RIGHT_BRACE, "expected '}'");
+
+  // pop the class constructor that was pushed from named_variable
+  emit_byte(OP_POP);
+
+  current_class = current_class->enclosing;
 }
 
 static void statement(bool _) {
@@ -1004,6 +1073,10 @@ static void statement(bool _) {
     if (match(TOKEN_SEMICOLON)) {
       emit_empty_return();
     } else {
+      if (current->function_type == TYPE_INITIALIZER) {
+        error_at_current("Can't return a non null value on `init` constructor");
+        return;
+      }
       expression();
       emit_byte(OP_RETURN);
       assert_current_and_advance(TOKEN_SEMICOLON, "Expected ';' after return");

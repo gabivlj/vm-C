@@ -62,6 +62,10 @@ static void print_function(ObjectFunction* fn) {
 
 void print_object(Value value) {
   switch (OBJECT_TYPE(value)) {
+    case OBJECT_BOUND_METHOD: {
+      print_function(AS_BOUND_METHOD(value)->method->function);
+      break;
+    }
     case OBJECT_INSTANCE: {
       ObjectInstance* instance = AS_INSTANCE(value);
       printf("<%s instance %p>", instance->klass->name->chars, instance);
@@ -153,6 +157,7 @@ ObjectUpvalue* new_upvalue(Value* slot) {
 ObjectClass* new_class(ObjectString* name) {
   ObjectClass* klass = ALLOCATE_OBJECT(ObjectClass, OBJECT_CLASS);
   klass->name = name;
+  init_table(&klass->methods);
   return klass;
 }
 
@@ -161,4 +166,11 @@ ObjectInstance* new_instance(ObjectClass* klass) {
   instance->klass = klass;
   init_table(&instance->fields);
   return instance;
+}
+
+ObjectBoundMethod* new_bound_method(Value klass_instance, ObjectClosure* method) {
+  ObjectBoundMethod* method_instance = ALLOCATE_OBJECT(ObjectBoundMethod, OBJECT_BOUND_METHOD);
+  method_instance->this = klass_instance;
+  method_instance->method = method;
+  return method_instance;
 }

@@ -38,6 +38,10 @@ static void free_object(Object* object) {
   printf("%p free type %d\n", (void*)object, object->type);
 #endif
   switch (object->type) {
+    case OBJECT_BOUND_METHOD: {
+      FREE(ObjectBoundMethod, object);
+      break;
+    }
     case OBJECT_INSTANCE: {
       ObjectInstance* instance = (ObjectInstance*)object;
       free_table(&instance->fields);
@@ -46,6 +50,7 @@ static void free_object(Object* object) {
     }
     case OBJECT_CLASS: {
       FREE(ObjectClass, object);
+      free_table(&((ObjectClass*)object)->methods);
       break;
     }
     case OBJECT_STRING: {
@@ -150,6 +155,7 @@ static void mark_roots() {
     mark_object((Object*)upvalue);
   }
   mark_compiler_roots();
+  mark_object((Object*)vm.init_string);
 }
 
 static void blackend_object(Object* object) {
@@ -159,6 +165,12 @@ static void blackend_object(Object* object) {
   printf("\n");
 #endif
   switch (object->type) {
+    case OBJECT_BOUND_METHOD: {
+      ObjectBoundMethod* method = (ObjectBoundMethod*)object;
+      mark_value(method->this);
+      mark_object((Object*)method->method);
+      break;
+    }
     case OBJECT_INSTANCE: {
       ObjectInstance* instance = (ObjectInstance*)object;
       mark_table(&instance->fields);
@@ -167,6 +179,7 @@ static void blackend_object(Object* object) {
     }
     case OBJECT_CLASS: {
       mark_object((Object*)((ObjectClass*)object)->name);
+      mark_table(&((ObjectClass*)object)->methods);
       break;
     }
     case OBJECT_CLOSURE: {

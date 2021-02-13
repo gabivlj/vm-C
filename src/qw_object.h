@@ -39,7 +39,10 @@ struct ObjectString {
 typedef struct ObjectClass {
   Object object;
   ObjectString* name;
+  Table methods;
 } ObjectClass;
+
+
 
 typedef struct ObjectInstance {
   Object object;
@@ -65,6 +68,13 @@ typedef struct {
   u32 upvalue_count;
 } ObjectClosure;
 
+// Instance method
+typedef struct ObjectBoundMethod {
+  Object obj;
+  Value this;
+  ObjectClosure* method;
+} ObjectBoundMethod;
+
 #define OBJECT_TYPE(value) (AS_OBJECT(value)->type)
 
 static inline bool is_object_type(Value value, ObjectType type) {
@@ -81,6 +91,8 @@ void print_object(Value value);
 #define AS_CSTRING(value) (((ObjectString*)AS_OBJECT(value))->chars)
 #define IS_INSTANCE(value) (is_object_type(value, OBJECT_INSTANCE))
 #define AS_INSTANCE(value) ((ObjectInstance*)AS_OBJECT(value))
+#define IS_BOUND_METHOD(value) (is_object_type(value, OBJECT_BOUND_METHOD))
+#define AS_BOUND_METHOD(value) ((ObjectBoundMethod*)AS_OBJECT(value))
 
 ObjectString* allocate_string(u32 length, u32 hash);
 Object* allocate_object(ObjectType type, isize true_size);
@@ -92,6 +104,7 @@ ObjectNative* new_native_function(NativeFn callback);
 ObjectString* copy_string(u32 length, const char* start);
 ObjectClass* new_class(ObjectString* name);
 ObjectInstance* new_instance(ObjectClass* klass);
+ObjectBoundMethod* new_bound_method(Value klass_instance, ObjectClosure* method);
 u32 hash_string(char* str, u32 length);
 bool is_truthy(Value* obj);
 

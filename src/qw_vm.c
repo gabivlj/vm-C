@@ -42,11 +42,14 @@ void init_vm() {
   vm.open_upvalues = NULL;
   vm.globals.values = NULL;
   init_table(&vm.strings);
+  vm.init_string = NULL;
+  vm.init_string = copy_string(4, "init");
 }
 
 void free_vm() {
   free_objects();
   free_table(&vm.strings);
+  vm.init_string = NULL;
 }
 
 /// When the function/block is gonna go out of scope,
@@ -127,9 +130,52 @@ static bool call_value(Value function_stack_pointer_start, u8 arg_count) {
   }
 
   switch (obj->type) {
+    case OBJECT_BOUND_METHOD: {
+      ObjectBoundMethod* method = (ObjectBoundMethod*)obj;
+      ObjectClosure* closure = method->method;
+      if (closure->function->number_of_parameters != arg_count) {
+        runtime_error("expected %d parameters, got: %d on `%s` call", closure->function->number_of_parameters,
+                      arg_count, closure->function->name->chars);
+        return false;
+      }
+#ifdef DEBUG_TRACE_EXECUTION
+      printf("[CLOSURE] Called '%s'\n[CLOSURE] Adding new frame...\n",
+             closure->function->name == NULL ? "main" : closure->function->name->chars);
+#endif
+      // vm.stack_top[-arg_count - 1] = method->this;
+      CallFrame* frame = &vm.frames[vm.frame_count++];
+      frame->ip = closure->function->chunk.code;
+      frame->function = closure;
+      frame->slots = vm.stack_top - arg_count - 1;
+      // `this` context
+      *(frame->slots) = method->this;
+      return true;
+    }
     case OBJECT_CLASS: {
       ObjectClass* class = AS_CLASS(function_stack_pointer_start);
+      // `this` context
       vm.stack_top[-arg_count - 1] = OBJECT_VAL(new_instance(class));
+      Value initializer;
+      if (table_get(&class->methods, vm.init_string, &initializer)) {
+        ObjectClosure* closure = (ObjectClosure*)initializer.as.object;
+        if (closure->function->number_of_parameters != arg_count) {
+          runtime_error("expected %d parameters, got: %d on `%s` call", closure->function->number_of_parameters,
+                        arg_count, closure->function->name->chars);
+          return false;
+        }
+#ifdef DEBUG_TRACE_EXECUTION
+        printf("[CLOSURE] Called '%s'\n[CLOSURE] Adding new frame...\n",
+               closure->function->name == NULL ? "main" : closure->function->name->chars);
+#endif
+        CallFrame* frame = &vm.frames[vm.frame_count++];
+        frame->ip = closure->function->chunk.code;
+        frame->function = closure;
+        frame->slots = vm.stack_top - arg_count - 1;
+        return true;
+      } else if (arg_count != 0) {
+        runtime_error("expected 0 parameters, got: %d on init", arg_count);
+        return false;
+      }
       return true;
     }
     case OBJECT_CLOSURE: {
@@ -180,6 +226,43 @@ static bool call_value(Value function_stack_pointer_start, u8 arg_count) {
       return false;
     }
   }
+}
+
+static bool invoke_from_class(ObjectClass* klass, ObjectString* name, u8 arg_count) {
+  Value method;
+  if (!table_get(&klass->methods, name, &method)) {
+    runtime_error("Undefined method class '%s'.", name->chars);
+    return false;
+  }
+  return call_value(method, arg_count);
+}
+
+static bool invoke(ObjectString* name, u8 arg_count) {
+  Value this = PEEK_STACK(arg_count);
+  if (!IS_INSTANCE(this)) {
+    runtime_error("can't call a non-instance method");
+    return false;
+  }
+  ObjectInstance* instance = AS_INSTANCE(this);
+  Value value;
+  if (table_get(&instance->fields, name, &value)) {
+    vm.stack_top[-arg_count - 1] = value;
+    return call_value(value, arg_count);
+  }
+
+  return invoke_from_class(instance->klass, name, arg_count);
+}
+
+static inline bool bind_method(ObjectClass* klass, ObjectString* name) {
+  Value method;
+  if (!table_get(&klass->methods, name, &method)) {
+    return false;
+  }
+  ObjectBoundMethod* bound_method = new_bound_method(PEEK_STACK(0), (ObjectClosure*)method.as.object);
+  // class instance pop
+  pop();
+  push(OBJECT_VAL(bound_method));
+  return true;
 }
 
 static inline void concatenate() {
@@ -273,7 +356,9 @@ static InterpretResult run() {
                                    &&do_op_set_property,
                                    &&do_op_get_property,
                                    &&do_op_set_property_top_stack,
-                                   &&do_op_get_property_top_stack};
+                                   &&do_op_get_property_top_stack,
+                                   &&do_op_method,
+                                   &&do_op_invoke};
 
 /// BinaryOp does a binary operation on the vm
 #define BINARY_OP(value_type, _op_)                                                                  \
@@ -349,6 +434,32 @@ static InterpretResult run() {
 
     // Goto current opcode handler
     DISPATCH();
+
+  do_op_invoke : {
+    ObjectString* method_name = AS_STRING(READ_CONSTANT_LONG());
+    u8 arg_count = READ_BYTE();
+    // vm.frame_count++;
+    if (!invoke(method_name, arg_count)) {
+      return INTERPRET_RUNTIME_ERROR;
+    }
+    if (run() == INTERPRET_RUNTIME_ERROR) {
+      return INTERPRET_RUNTIME_ERROR;
+    }
+    if (vm.frame_count == 0) {
+      return INTERPRET_OK;
+    }
+    continue;
+  }
+  do_op_method : {
+    Value string = READ_CONSTANT_LONG();
+    Value method = PEEK_STACK(0);
+    Value class_constructor = PEEK_STACK(1);
+    ObjectClass* klass = AS_CLASS(class_constructor);
+    table_set(&klass->methods, AS_STRING(string), method);
+    // pop method
+    pop();
+    continue;
+  }
   do_op_set_property_top_stack : {
     //
     Value instance = PEEK_STACK(2);
@@ -411,6 +522,9 @@ static InterpretResult run() {
       pop();
       // Push the property value
       push(v);
+      continue;
+    }
+    if (bind_method(instance->klass, name)) {
       continue;
     }
     pop();

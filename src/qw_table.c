@@ -24,7 +24,6 @@ static Entry* find_entry(Entry* entries, u32 capacity, ObjectString* key) {
   Entry* tombstone = NULL;
   for (;;) {
     Entry* entry = &entries[index];
-    // Strangely enough this does the work atm
     if (entry->key == key) {
       return entry;
     }

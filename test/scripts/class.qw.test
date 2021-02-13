@@ -1,3 +1,19 @@
+{
+	class Animal {
+		init(name, age) {
+			this.age = age;
+			this.name = name;
+		}
+
+		speak(day) {
+			return "Hi, I am " + this.name + " and I am " + this.age + ", today is " + day + "!";
+		}
+	}
+	var cow = Animal("cow", "3");
+	assert cow.speak("Wednesday") == "Hi, I am cow and I am 3, today is Wednesday!";
+	print "damn";
+}
+
 
 class Thing {}
 print Thing;
@@ -10,7 +26,19 @@ fun exists(value) {
 }
 
 {
-	class Thing2 {}
+	class Thing2 {
+		thing2() {
+			fun p() {
+				return this.cool + " is a cool thing!";
+			}
+			return p();
+		}
+
+		thing3(thingy) {
+			this.cool = thingy;
+			return thingy + " good!";
+		}
+	}
 	print Thing2;
 	var t = Thing2();
 	print t;
@@ -31,6 +59,9 @@ fun exists(value) {
 	}
 	var x = 3;
 	assert x == 3;
+	print t.thing3;
+	assert t.thing3("is") == "is good!";
+	assert t.thing2() == "is is a cool thing!";
 }
 
 {

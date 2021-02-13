@@ -113,6 +113,11 @@ u32 dissasemble_instruction(Chunk* chunk, u32 offset) {
     case OP_GET_GLOBAL: {
       return constant_instruction_long("OP_GET_GLOBAL", chunk, offset);
     }
+    case OP_INVOKE: {
+      offset = constant_instruction_long("OP_INVOKE", chunk, offset);
+      offset++;
+      return offset;
+    }
     case OP_DEFINE_GLOBAL: {
       return constant_instruction_long("OP_DEFINE_GLOBAL", chunk, offset);
     }
@@ -152,6 +157,9 @@ u32 dissasemble_instruction(Chunk* chunk, u32 offset) {
 
     case OP_SET_UPVALUE: {
       return constant_instruction_long("OP_SET_UPVALUE", chunk, offset);
+    }
+    case OP_METHOD: {
+      return constant_instruction_long("OP_METHOD", chunk, offset);
     }
     case OP_CLOSE_UPVALUE: {
       return simple_instruction("OP_CLOSE_UPVALUE", offset);

@@ -13,6 +13,7 @@ typedef enum {
   OBJECT_UPVALUE,
   OBJECT_CLASS,
   OBJECT_INSTANCE,
+  OBJECT_BOUND_METHOD
 } ObjectType;
 
 typedef struct ObjectString ObjectString;

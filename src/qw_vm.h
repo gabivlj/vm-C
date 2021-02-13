@@ -65,6 +65,9 @@ typedef struct {
 
   /// GARBAGE COLLECTOR: Next GC means what is the size needed for the next garbage collection
   isize next_gc;
+
+  /// string for refering constructors
+  ObjectString* init_string;
 } VM;
 
 typedef enum { INTERPRET_OK, INTERPRET_COMPILER_ERROR, INTERPRET_RUNTIME_ERROR } InterpretResult;
