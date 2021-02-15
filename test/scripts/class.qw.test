@@ -1,4 +1,46 @@
 {
+	class Doughnut {
+	  cook() {
+	    print "Dunk in the fryer.";
+	    this.finish("sprinkles");
+	  }
+
+	  finish(ingredient) {
+	    return "Finish with " + ingredient;
+	  }
+	}
+
+	class Cruller < Doughnut {
+	  finish(ingredient) {
+	    return super.finish(ingredient);
+	  }
+	}
+
+	assert Cruller().finish("icing") == "Finish with icing";
+
+}
+
+
+{
+	class Cow {
+		speak(s) {
+			return "Muuu " + s;
+		} 
+
+
+	}
+
+	class CatCow < Cow {
+		meow(s) {
+			return this.speak(s) + " meow";
+		}
+	}
+
+	var c = CatCow();
+	assert c.meow("UWU") == "Muuu UWU meow";
+}
+
+{
 	class Animal {
 		init(name, age) {
 			this.age = age;

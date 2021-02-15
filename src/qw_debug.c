@@ -107,6 +107,9 @@ u32 dissasemble_instruction(Chunk* chunk, u32 offset) {
     case OP_NOT: {
       return simple_instruction("OP_NOT", offset);
     }
+    case OP_INHERIT: {
+      return simple_instruction("OP_INHERIT", offset);
+    }
     case OP_POP: {
       return simple_instruction("OP_POP", offset);
     }
@@ -178,6 +181,9 @@ u32 dissasemble_instruction(Chunk* chunk, u32 offset) {
     }
     case OP_CLASS: {
       return constant_instruction_long("OP_CLASS", chunk, offset);
+    }
+    case OP_GET_SUPER: {
+      return constant_instruction_long("OP_GET_SUPER", chunk, offset);
     }
     case OP_CLOSURE: {
       // TODO: PRINT CLOSURE : (

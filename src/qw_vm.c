@@ -156,6 +156,7 @@ static bool call_value(Value function_stack_pointer_start, u8 arg_count) {
       // `this` context
       vm.stack_top[-arg_count - 1] = OBJECT_VAL(new_instance(class));
       Value initializer;
+      // if the class contains a constructor call the constructor
       if (table_get(&class->methods, vm.init_string, &initializer)) {
         ObjectClosure* closure = (ObjectClosure*)initializer.as.object;
         if (closure->function->number_of_parameters != arg_count) {
@@ -358,7 +359,9 @@ static InterpretResult run() {
                                    &&do_op_set_property_top_stack,
                                    &&do_op_get_property_top_stack,
                                    &&do_op_method,
-                                   &&do_op_invoke};
+                                   &&do_op_invoke,
+                                   &&do_op_inherit,
+                                   &&do_op_get_super};
 
 /// BinaryOp does a binary operation on the vm
 #define BINARY_OP(value_type, _op_)                                                                  \
@@ -435,6 +438,16 @@ static InterpretResult run() {
     // Goto current opcode handler
     DISPATCH();
 
+  do_op_get_super : {
+    Value name_val = READ_CONSTANT_LONG();
+    ObjectString* name = AS_STRING(name_val);
+    ObjectClass* superclass = AS_CLASS(pop());
+    if (!bind_method(superclass, name)) {
+      return INTERPRET_RUNTIME_ERROR;
+    }
+    continue;
+  }
+
   do_op_invoke : {
     ObjectString* method_name = AS_STRING(READ_CONSTANT_LONG());
     u8 arg_count = READ_BYTE();
@@ -448,6 +461,24 @@ static InterpretResult run() {
     if (vm.frame_count == 0) {
       return INTERPRET_OK;
     }
+    continue;
+  }
+  do_op_inherit : {
+    //
+    ObjectClass* superclass = AS_CLASS(PEEK_STACK(1));
+    if (!IS_CLASS(PEEK_STACK(1))) {
+      runtime_error("can't inherit from ");
+      print_value(PEEK_STACK(1));
+      return INTERPRET_RUNTIME_ERROR;
+    }
+    ObjectClass* subclass = AS_CLASS(PEEK_STACK(0));
+    table_copy(&superclass->methods, &subclass->methods);
+    pop();  // Subclass
+    // Ok so we don't pop because the
+    // guy in charge of popping the superclass
+    // is the scope of the class,
+    // which we define as a local, that's why it knows
+    // pop();
     continue;
   }
   do_op_method : {

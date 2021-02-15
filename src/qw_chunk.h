@@ -54,6 +54,8 @@ typedef enum {
   OP_GET_PROPERTY_TOP_STACK,
   OP_METHOD,
   OP_INVOKE,
+  OP_INHERIT,
+  OP_GET_SUPER
 } OpCode;
 
 /// Chunk is a sequence of bytecode

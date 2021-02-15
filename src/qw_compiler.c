@@ -32,6 +32,7 @@ static void call(bool);
 static void or_op(bool);
 static void dot(bool);
 static void this_keyword(bool);
+static void super(bool);
 // instance->"key", instance->defined_variable_as_key, instance->0
 static void index_access(bool);
 static void add_native_function(const char* name, NativeFn function);
@@ -70,7 +71,7 @@ ParseRule rules[] = {
     [TOKEN_OR] = {NULL, or_op, PREC_OR},
     [TOKEN_PRINT] = {NULL, NULL, PREC_NONE},
     [TOKEN_RETURN] = {NULL, NULL, PREC_NONE},
-    [TOKEN_SUPER] = {NULL, NULL, PREC_NONE},
+    [TOKEN_SUPER] = {super, NULL, PREC_NONE},
     [TOKEN_THIS] = {this_keyword, NULL, PREC_NONE},
     [TOKEN_TRUE] = {literal, NULL, PREC_NONE},
     [TOKEN_VAR] = {NULL, NULL, PREC_NONE},
@@ -97,6 +98,7 @@ typedef struct {
 
 typedef struct ClassCompiler {
   struct ClassCompiler* enclosing;
+  bool has_superclass;
   Token name;
 } ClassCompiler;
 
@@ -318,7 +320,7 @@ static i32 resolve_upvalue(Compiler* compiler, Token* name) {
   return -1;
 }
 
-/// This is a function that parses a identifier ['=' <expression>]
+/// This is a function that parses a identifier ['=' <expression>] or emits a GET/SET code
 static void named_variable(Token name, bool can_assign) {
   u8 get_op;
   u8 set_op;
@@ -784,7 +786,6 @@ static void call(bool can_assign) {
   emit_op_u8(OP_CALL, arg_list);
 }
 
-
 static void dot(bool assignable) {
   assert_current_and_advance(TOKEN_IDENTIFIER, "Expected identifier after .");
   u16 name = make_constant(OBJECT_VAL(copy_string(parser.previous.length, parser.previous.start)));
@@ -799,7 +800,6 @@ static void dot(bool assignable) {
     emit_op_u16(OP_GET_PROPERTY, name);
   }
 }
-
 
 static void while_statement() {
 #if USE_PARENS_FOR_STATEMENT_CONDITIONS
@@ -1019,17 +1019,17 @@ static void this_keyword(bool _) {
 }
 
 static void class_declaration() {
-  // Identifier
-  Token* name = &parser.previous;
-
   // Allocate local/global variable
   // If local: It's cool because we got it in the stack and OP_CLASS will push class constructor into stack
   // If global: We reserve a space in global symbol_table and then in define_variable we will emit
   //            OP_DEFINE_GLOBAL which will take the top element of the stack (just pushed by OP_CLASS)
   u16 name_constant = parse_variable("Expected identifier", true);
 
+  // Identifier
+  Token name = parser.previous;
+
   // Make the constant (ObjectString*) which the OP_CLASS will use
-  u16 constant_name = make_constant(OBJECT_VAL(copy_string(name->length, name->start)));
+  u16 constant_name = make_constant(OBJECT_VAL(copy_string(name.length, name.start)));
 
   // This operation is for getting the name and pushing the class into the stack
   emit_op_u16(OP_CLASS, constant_name);
@@ -1040,11 +1040,40 @@ static void class_declaration() {
   // declare current compilation of class
   ClassCompiler compiler_class;
   compiler_class.enclosing = current_class;
-  compiler_class.name = *name;
+  compiler_class.name = name;
   current_class = &compiler_class;
+  current_class->has_superclass = false;
+
+  if (match(TOKEN_LESS)) {
+    current_class->has_superclass = true;
+    // Take the Identifier token
+    assert_current_and_advance(TOKEN_IDENTIFIER, "Expected valid superclass name.");
+
+    if (name.length == parser.previous.length && memcmp(name.start, parser.previous.start, name.length) == 0) {
+      error_at_previous("A class cannot inherit itself");
+    }
+
+    // Load the superclass constructor into the stack
+    variable(false);
+
+    // loads the 'super' into a new scope (so its a local variable for the class)
+    begin_scope();
+    Token t;
+    t.length = 5;
+    t.start = "super";
+    t.type = TOKEN_IDENTIFIER;
+    add_local(t, true);
+    define_variable(0);
+
+    // Load the current constructor into the stack
+    named_variable(name, false);
+
+    // Inherit [..., SUPERCLASS CONSTRUCTOR, CLASS CONSTRUCTOR];
+    emit_byte(OP_INHERIT);
+  }
 
   // load the class constructor in the stack (Because we want the method to get the class from the stack)
-  named_variable(*name, false);
+  named_variable(name, false);
 
   assert_current_and_advance(TOKEN_LEFT_BRACE, "expected '{'");
 
@@ -1057,7 +1086,29 @@ static void class_declaration() {
   // pop the class constructor that was pushed from named_variable
   emit_byte(OP_POP);
 
+  if (current_class->has_superclass) {
+    end_scope();
+  }
+
   current_class = current_class->enclosing;
+}
+
+static void super(bool _) {
+  assert_current_and_advance(TOKEN_DOT, "expected '.' after 'super'.");
+  assert_current_and_advance(TOKEN_IDENTIFIER, "expected superclass method name.");
+  u16 name = make_constant(OBJECT_VAL(copy_string(parser.previous.length, parser.previous.start)));
+  Token this_token;
+  this_token.length = 4;
+  this_token.start = "this";
+  Token super_token;
+  super_token.length = 5;
+  super_token.start = "super";
+  // Load into the stack the this/super values
+  // Located in the 0 local position of the compiler
+  named_variable(this_token, false);
+  // Located in the upvalues
+  named_variable(super_token, false);
+  emit_op_u16(OP_GET_SUPER, name);
 }
 
 static void statement(bool _) {
