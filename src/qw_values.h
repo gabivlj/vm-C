@@ -13,7 +13,8 @@ typedef enum {
   OBJECT_UPVALUE,
   OBJECT_CLASS,
   OBJECT_INSTANCE,
-  OBJECT_BOUND_METHOD
+  OBJECT_BOUND_METHOD,
+  OBJECT_ARRAY
 } ObjectType;
 
 typedef struct ObjectString ObjectString;
@@ -68,5 +69,6 @@ void init_value_array(ValueArray* array);
 void push_value(ValueArray* array, Value value);
 void free_value_array(ValueArray* array);
 void print_value(Value value);
+void grow(ValueArray* arr, u32 grow_by);
 
 #endif

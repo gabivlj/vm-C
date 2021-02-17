@@ -10,6 +10,12 @@ void init_value_array(ValueArray* array) {
   array->count = 0;
 }
 
+void grow(ValueArray* arr, u32 grow_by) {
+  u32 old_cap = arr->capacity;
+  arr->capacity += grow_by;
+  arr->values = GROW_ARRAY(Value, arr->values, old_cap, arr->capacity);
+}
+
 void push_value(ValueArray* array, Value value) {
   if (array->capacity < array->count + 1) {
     u32 old_capacity = array->capacity;

@@ -118,12 +118,12 @@ static void runtime_error(const char* format, ...) {
   reset_stack();
 }
 
-static bool call_value(Value function_stack_pointer_start, u8 arg_count) {
-  if (function_stack_pointer_start.type != VAL_OBJECT) {
+static bool call_value(Value method_value, u8 arg_count) {
+  if (method_value.type != VAL_OBJECT) {
     runtime_error("can't call non function");
     return false;
   }
-  Object* obj = function_stack_pointer_start.as.object;
+  Object* obj = method_value.as.object;
   if (vm.frame_count == FRAMES_MAX) {
     runtime_error("Stackoverflow...");
     return false;
@@ -152,7 +152,7 @@ static bool call_value(Value function_stack_pointer_start, u8 arg_count) {
       return true;
     }
     case OBJECT_CLASS: {
-      ObjectClass* class = AS_CLASS(function_stack_pointer_start);
+      ObjectClass* class = AS_CLASS(method_value);
       // `this` context
       vm.stack_top[-arg_count - 1] = OBJECT_VAL(new_instance(class));
       Value initializer;
@@ -246,11 +246,15 @@ static bool invoke(ObjectString* name, u8 arg_count) {
   }
   ObjectInstance* instance = AS_INSTANCE(this);
   Value value;
+
+  // If it's a field variable
   if (table_get(&instance->fields, name, &value)) {
+    // Set the root as the function call
     vm.stack_top[-arg_count - 1] = value;
     return call_value(value, arg_count);
   }
 
+  // A method call
   return invoke_from_class(instance->klass, name, arg_count);
 }
 
@@ -361,7 +365,9 @@ static InterpretResult run() {
                                    &&do_op_method,
                                    &&do_op_invoke,
                                    &&do_op_inherit,
-                                   &&do_op_get_super};
+                                   &&do_op_get_super,
+                                   &&do_op_super_invoke,
+                                   &&do_op_array};
 
 /// BinaryOp does a binary operation on the vm
 #define BINARY_OP(value_type, _op_)                                                                  \
@@ -438,11 +444,37 @@ static InterpretResult run() {
     // Goto current opcode handler
     DISPATCH();
 
-  do_op_get_super : {
-    Value name_val = READ_CONSTANT_LONG();
-    ObjectString* name = AS_STRING(name_val);
+  do_op_array : {
+    u16 arr_len = (READ_BYTE() << 8) | READ_BYTE();
+    ValueArray arr;
+    init_value_array(&arr);
+    grow(&arr, arr_len);
+    while (arr_len) {
+      arr.values[arr_len - 1] = pop();
+      arr.count++;
+      arr_len--;
+    }
+    push(OBJECT_VAL(new_array(arr)));
+    continue;
+  }
+
+  do_op_super_invoke : {
+    Value method_val = READ_CONSTANT_LONG();
+    ObjectString* method_name = AS_STRING(method_val);
+    u8 arg_count = READ_BYTE();
     ObjectClass* superclass = AS_CLASS(pop());
-    if (!bind_method(superclass, name)) {
+    if (!invoke_from_class(superclass, method_name, arg_count)) {
+      return INTERPRET_RUNTIME_ERROR;
+    }
+    frame = &vm.frames[vm.frame_count - 1];
+    continue;
+  }
+
+  do_op_get_super : {
+    Value method_val = READ_CONSTANT_LONG();
+    ObjectString* method = AS_STRING(method_val);
+    ObjectClass* superclass = AS_CLASS(pop());
+    if (!bind_method(superclass, method)) {
       return INTERPRET_RUNTIME_ERROR;
     }
     continue;
@@ -517,6 +549,25 @@ static InterpretResult run() {
   do_op_get_property_top_stack : {
     //
     Value instance = PEEK_STACK(1);
+
+    if (IS_ARRAY(instance)) {
+      ObjectArray* arr = AS_ARRAY(instance);
+      Value index = PEEK_STACK(0);
+      if (!IS_NUMBER(index)) {
+        runtime_error("expected number for index access on array...");
+        return INTERPRET_RUNTIME_ERROR;
+      }
+      int number = (int)AS_NUMBER(index);
+      if (number < 0 || number >= arr->array.count) {
+        runtime_error("out of bounds");
+        return INTERPRET_RUNTIME_ERROR;
+      }
+      pop();
+      pop();
+      push(arr->array.values[number]);
+      continue;
+    }
+
     if (!IS_INSTANCE(instance)) {
       runtime_error("cannot access property on a non instance value: ");
       print_value(PEEK_STACK(1));
@@ -562,6 +613,7 @@ static InterpretResult run() {
     push(NIL_VAL);
     continue;
   }
+
   do_op_set_property : {
     //
     ObjectInstance* instance = AS_INSTANCE(PEEK_STACK(1));
@@ -573,6 +625,7 @@ static InterpretResult run() {
     push(set);
     continue;
   }
+
   do_op_class : {
     u16 index = (READ_BYTE() << 8) | READ_BYTE();
     ObjectString* str = (ObjectString*)frame->function->function->chunk.constants.values[index].as.object;

@@ -1,0 +1,48 @@
+class CoolClass {
+  init(is_cool) {
+    this.cool = is_cool;
+  }
+
+  print_cool() {
+    print this.cool;
+  }
+}
+
+fun reference_to_function() {
+  return "cool";
+}
+
+var arr = [1, 2, 3, 4, [5, 6, 7, [8, 9]], reference_to_function, CoolClass(1)];
+
+push(arr, [1, 2, 3]);
+
+assert arr[0] + arr[1] + arr[2] == 6;
+assert arr[5]() == "cool";
+
+while len(arr) != 0 {
+  pop(arr);
+}
+
+
+assert len(arr) == 0;
+
+var numbers = [];
+
+for (var i = 0; i < 100; i = i + 1) {
+  push(numbers, i);
+}
+
+while len(numbers) {
+  
+  when numbers[len(numbers) - 1] {
+    -1..100 -> {
+      assert 1 == 1;
+    }
+    
+    nothing -> {
+      assert 0 == 1;
+    }
+  }
+
+  assert pop(numbers) == len(numbers);
+}

@@ -185,6 +185,12 @@ u32 dissasemble_instruction(Chunk* chunk, u32 offset) {
     case OP_GET_SUPER: {
       return constant_instruction_long("OP_GET_SUPER", chunk, offset);
     }
+    case OP_SUPER_INVOKE: {
+      return constant_instruction_long("OP_SUPER_INVOKE", chunk, offset);
+    }
+    case OP_ARRAY: {
+      return constant_instruction_long("OP_ARRAY", chunk, offset);
+    }
     case OP_CLOSURE: {
       // TODO: PRINT CLOSURE : (
 

@@ -38,6 +38,12 @@ static void free_object(Object* object) {
   printf("%p free type %d\n", (void*)object, object->type);
 #endif
   switch (object->type) {
+    case OBJECT_ARRAY: {
+      ObjectArray* arr = (ObjectArray*)object;
+      free_value_array(&arr->array);
+      FREE(ObjectArray, arr);
+      break;
+    }
     case OBJECT_BOUND_METHOD: {
       FREE(ObjectBoundMethod, object);
       break;
@@ -158,6 +164,7 @@ static void mark_roots() {
   mark_object((Object*)vm.init_string);
 }
 
+/// Marks connections
 static void blackend_object(Object* object) {
 #ifdef DEBUG_LOG_GC
   printf("%p blacken ", (void*)object);
@@ -165,6 +172,10 @@ static void blackend_object(Object* object) {
   printf("\n");
 #endif
   switch (object->type) {
+    case OBJECT_ARRAY: {
+      mark_array(&((ObjectArray*)object)->array);
+      break;
+    }
     case OBJECT_BOUND_METHOD: {
       ObjectBoundMethod* method = (ObjectBoundMethod*)object;
       mark_value(method->this);

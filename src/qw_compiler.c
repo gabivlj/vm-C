@@ -31,6 +31,7 @@ static void and_op(bool);
 static void call(bool);
 static void or_op(bool);
 static void dot(bool);
+static void array(bool);
 static void this_keyword(bool);
 static void super(bool);
 // instance->"key", instance->defined_variable_as_key, instance->0
@@ -82,7 +83,7 @@ ParseRule rules[] = {
     [TOKEN_EOF] = {NULL, NULL, PREC_NONE},
     [TOKEN_DOUBLE_POINT] = {NULL, NULL, PREC_NONE},
     [TOKEN_MINUS_ARROW] = {NULL, NULL, PREC_NONE},
-    [TOKEN_LEFT_BRACKET] = {NULL, index_access, PREC_CALL},
+    [TOKEN_LEFT_BRACKET] = {array, index_access, PREC_CALL},
     [TOKEN_RIGHT_BRACKET] = {NULL, NULL, PREC_NONE},
     [TOKEN_NOTHING] = {NULL, NULL, PREC_NONE},
 };
@@ -158,10 +159,13 @@ static void init_compiler(Compiler* compiler_parameter, FunctionType type) {
   }
   if (compiler_parameter->enclosing_compiler == NULL) {
     if (symbol_table.capacity != 0) {
-      //      free_table(&symbol_table);
+      free_table(&symbol_table);
     }
     init_table(&symbol_table);
-    //    add_native_function("clock", clock_native);
+    add_native_function("clock", clock_native);
+    add_native_function("push", push_array);
+    add_native_function("len", len_array);
+    add_native_function("pop", pop_array);
   }
 }
 
@@ -1093,7 +1097,27 @@ static void class_declaration() {
   current_class = current_class->enclosing;
 }
 
+static void array(bool _) {
+  u32 array_length = 0;
+  while (!check(TOKEN_RIGHT_BRACKET) && !check(TOKEN_EOF)) {
+    expression();
+    if (!check(TOKEN_RIGHT_BRACKET))
+      assert_current_and_advance(TOKEN_COMMA, "expected ',' after expression on array initialization");
+    else if (check(TOKEN_COMMA)) {
+      advance();
+    }
+    ++array_length;
+  }
+  assert_current_and_advance(TOKEN_RIGHT_BRACKET, "expected ']' on array init");
+  emit_op_u16(OP_ARRAY, array_length);
+}
+
 static void super(bool _) {
+  if (current_class == NULL) {
+    error_at_previous("can't use super keyword on a non class method");
+  } else if (!current_class->has_superclass) {
+    error_at_previous("can't use super keyword on a class with no parent");
+  }
   assert_current_and_advance(TOKEN_DOT, "expected '.' after 'super'.");
   assert_current_and_advance(TOKEN_IDENTIFIER, "expected superclass method name.");
   u16 name = make_constant(OBJECT_VAL(copy_string(parser.previous.length, parser.previous.start)));
@@ -1106,9 +1130,17 @@ static void super(bool _) {
   // Load into the stack the this/super values
   // Located in the 0 local position of the compiler
   named_variable(this_token, false);
-  // Located in the upvalues
-  named_variable(super_token, false);
-  emit_op_u16(OP_GET_SUPER, name);
+
+  if (match(TOKEN_LEFT_PAREN)) {
+    u8 arg_count = argument_list();
+    named_variable(super_token, false);
+    emit_op_u16(OP_SUPER_INVOKE, name);
+    emit_byte(arg_count);
+  } else {
+    // Located in the upvalues
+    named_variable(super_token, false);
+    emit_op_u16(OP_GET_SUPER, name);
+  }
 }
 
 static void statement(bool _) {

@@ -62,6 +62,16 @@ static void print_function(ObjectFunction* fn) {
 
 void print_object(Value value) {
   switch (OBJECT_TYPE(value)) {
+    case OBJECT_ARRAY: {
+      ObjectArray* arr = AS_ARRAY(value);
+      printf("[");
+      for (int i = 0; i < arr->array.count; ++i) {
+        print_value(arr->array.values[i]);
+        if (i != arr->array.count - 1) printf(", ");
+      }
+      printf("]");
+      break;
+    }
     case OBJECT_BOUND_METHOD: {
       print_function(AS_BOUND_METHOD(value)->method->function);
       break;
@@ -173,4 +183,10 @@ ObjectBoundMethod* new_bound_method(Value klass_instance, ObjectClosure* method)
   method_instance->this = klass_instance;
   method_instance->method = method;
   return method_instance;
+}
+
+ObjectArray* new_array(ValueArray array) {
+  ObjectArray* arr = ALLOCATE_OBJECT(ObjectArray, OBJECT_ARRAY);
+  arr->array = array;
+  return arr;
 }

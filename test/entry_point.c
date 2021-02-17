@@ -211,10 +211,10 @@ TEST test_lines(void) {
 }
 
 TEST test_file_compilations() {
-  const u32 number_of_scripts = 7;  // 26 * 4;
-  const char* scripts[] = {"./scripts/class.qw.test", "./scripts/epic_closure.qw.test", "./scripts/closure.qw.test",
-                           "./scripts/vec.qw.test",   "./scripts/scopes.qw.test",       "./scripts/fib.qw.test",
-                           "./scripts/gc01.qw.test",  "./scripts/when.qw.test"};
+  const u32 number_of_scripts = 8;  // 26 * 4;
+  const char* scripts[] = {"./scripts/array.qw.test",   "./scripts/class.qw.test", "./scripts/epic_closure.qw.test",
+                           "./scripts/closure.qw.test", "./scripts/vec.qw.test",   "./scripts/scopes.qw.test",
+                           "./scripts/fib.qw.test",     "./scripts/gc01.qw.test",  "./scripts/when.qw.test"};
   for (u16 i = 0; i < number_of_scripts; ++i) {
     char* f = read_file(scripts[i]);
     InterpretResult result = interpret_source(f);
