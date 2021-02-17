@@ -31,11 +31,12 @@ while len(numbers) {
       print "It's a number between 0 and 99";
     }
 
-    "a string??" -> {
-      print "It's a string of value `a string??`";
+
+    "a string??" | "another string" | -100 -> {
+      print "It's a string of value `a string??` or a string of value 'another string' or a number of value -100";
     }
 
-    nothing -> print "Not a number between 0 and 99 and not `a string??`";
+    nothing -> print "Not a number between 0 and 99 and not `a string??` and not 'another string' and not a number of value -100";
   }
 
   assert pop(numbers) == len(numbers);
