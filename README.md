@@ -16,7 +16,7 @@ var fake_hash_map = EmptyClass();
 
 fake_hash_map["HELLO WORLD"] = "Hello";
 
-print fake_hash_map["HELLO WORLD"];
+assert fake_hash_map["HELLO WORLD"] == "Hello";
 
 var numbers = [];
 
