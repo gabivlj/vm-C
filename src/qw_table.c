@@ -6,7 +6,7 @@
 #include "qw_object.h"
 #include "qw_values.h"
 
-//
+//s
 void init_table(Table* table) {
   table->count = 0;
   table->capacity = 0;
